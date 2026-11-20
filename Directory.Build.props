@@ -1,6 +1,6 @@
 <Project>
   <!-- The version of Room Acoustics 3D: the engine reports it (GET /api/health), and publish-app.ps1 names the package after it. -->
   <PropertyGroup>
-    <Version>1.0.4</Version>
+    <Version>1.1.0</Version>
   </PropertyGroup>
 </Project>
