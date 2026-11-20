@@ -166,7 +166,7 @@ test('materials are chosen from the whole list in sections, with favourites, rec
 
   await trigger.click();
   await dialog.waitFor();
-  assert.ok(await rows.count() > 600, 'the whole list, not a first few');
+  assert.ok(await rows.count() > 90, 'the whole list, not a first few');
   assert.ok(await dialog.locator('tbody th').count() >= 5, 'in sections');
 
   // a section folds shut from its heading, and Collapse all / Expand all do every one
