@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- A tiny launcher for the web version: it starts RoomAcoustics.Api.exe (beside it) with no console window, opens the page, and sits in the
+       notification area with Open and Quit, so the program can be closed without hunting for a window. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>RoomAcoustics.Tray</RootNamespace>
+    <AssemblyName>RoomAcoustics</AssemblyName>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+  </PropertyGroup>
+
+</Project>

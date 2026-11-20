@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/RoomAcoustics.Core/RoomAcoustics.Core.csproj" />
+    <Project Path="src/RoomAcoustics.Api/RoomAcoustics.Api.csproj" />
+    <Project Path="src/RoomAcoustics.Tray/RoomAcoustics.Tray.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/RoomAcoustics.Core.Tests/RoomAcoustics.Core.Tests.csproj" />
+    <Project Path="tests/RoomAcoustics.Api.Tests/RoomAcoustics.Api.Tests.csproj" />
+  </Folder>
+</Solution>

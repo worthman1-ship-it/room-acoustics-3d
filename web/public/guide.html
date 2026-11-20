@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Room Acoustics 3D: user guide</title>
+<link rel="icon" href="data:," />
+<style>
+  :root { --ink: #1c2330; --muted: #5b6574; --rule: #d8dde5; --accent: #6d28d9; --panel: #f5f7fa; }
+  * { box-sizing: border-box; }
+  body { margin: 0; color: var(--ink); background: #fff; font: 16px/1.6 system-ui, 'Segoe UI', sans-serif; }
+  header { padding: 28px 40px 18px; border-bottom: 1px solid var(--rule); }
+  header h1 { margin: 0 0 4px; font-size: 26px; }
+  header p { margin: 0; color: var(--muted); font-size: 14px; }
+  .layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); }
+  nav { position: sticky; top: 0; align-self: start; max-height: 100vh; overflow: auto; padding: 20px 18px 40px 40px; font-size: 13px; line-height: 1.5; }
+  nav ol { margin: 0; padding-left: 20px; }
+  nav a { color: var(--ink); text-decoration: none; }
+  nav a:hover { color: var(--accent); text-decoration: underline; }
+  main { max-width: 860px; padding: 8px 40px 80px 24px; }
+  h2 { font-size: 21px; line-height: 1.3; margin: 40px 0 10px; padding-top: 10px; border-top: 1px solid var(--rule); }
+  h3 { font-size: 16px; margin: 24px 0 6px; }
+  a { color: var(--accent); }
+  b.ui { font-weight: 600; white-space: nowrap; }
+  .note { background: var(--panel); border-left: 3px solid var(--accent); padding: 8px 14px; margin: 14px 0; font-size: 15px; }
+  table { border-collapse: collapse; margin: 10px 0 16px; font-size: 14px; line-height: 1.4; }
+  th, td { border: 1px solid var(--rule); padding: 4px 9px; text-align: left; vertical-align: top; }
+  th { background: var(--panel); }
+  kbd { font: 13px Consolas, monospace; background: var(--panel); border: 1px solid var(--rule); border-radius: 3px; padding: 0 4px; }
+  @media print {
+    nav { display: none; }
+    .layout { display: block; }
+    main { max-width: none; padding: 0 10px; }
+    h2 { break-after: avoid; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Room Acoustics 3D: user guide</h1>
+  <p>How to use the program, from a first room to maps, listening and reports. The methods and formulas behind it are in <a href="/theory.html">Theory and references</a>.</p>
+</header>
+<div class="layout">
+<nav>
+  <ol>
+    <li><a href="#start">Starting and stopping</a></li>
+    <li><a href="#screen">The screen</a></li>
+    <li><a href="#room">The room</a></li>
+    <li><a href="#models">Imported models</a></li>
+    <li><a href="#surfaces">Surfaces and screens</a></li>
+    <li><a href="#sources">Sources and receivers</a></li>
+    <li><a href="#calculate">Calculating</a></li>
+    <li><a href="#results">Results</a></li>
+    <li><a href="#maps">Maps</a></li>
+    <li><a href="#listen">Listening</a></li>
+    <li><a href="#measured">Measured responses</a></li>
+    <li><a href="#saving">Saving, exporting, reports</a></li>
+    <li><a href="#assistant">An AI assistant</a></li>
+    <li><a href="#limits">Good to know</a></li>
+  </ol>
+</nav>
+<main>
+
+<h2 id="start">1. Starting and stopping</h2>
+<p>Run <b>RoomAcoustics.exe</b>. It starts the engine in the background, opens the program in your web browser at <a href="http://localhost:5080">http://localhost:5080</a> once the engine answers, and leaves an icon in the notification area. Its menu has <b class="ui">Open Room Acoustics</b> (double-clicking the icon does the same) and <b class="ui">Quit</b>, which stops the engine. Starting it a second time just opens the page again.</p>
+<p>Everything runs on your own computer: the engine listens only on <code>localhost</code>, and no file or result leaves the machine. The header shows <b class="ui">Engine connected</b> while the engine is answering. If it says <b class="ui">Engine offline</b>, start RoomAcoustics.exe again; if the icon warns that the engine stopped, another program (or another copy) may be using port 5080.</p>
+<div class="note">Closing the browser tab does not stop the engine; Quit in the icon's menu does. A calculation in progress is lost when the engine stops.</div>
+
+<h2 id="screen">2. The screen</h2>
+<table>
+  <tr><th>Part</th><th>What it holds</th></tr>
+  <tr><td>Side panel (left)</td><td>The 3-D model, the room's size, the sources and receiver, buttons that open the Surfaces and Settings windows, the octave band shown, and <b class="ui">Run simulation</b>, <b class="ui">Quick estimate</b> and <b class="ui">Calculate map</b>. ◀ folds it away; when folded its three buttons stay.</td></tr>
+  <tr><td>Header</td><td>The room's size and volume, how long the last calculation took (and a warning when the inputs have changed since), <b class="ui">Save project</b>, <b class="ui">Load project…</b>, <b class="ui">Job list</b>, and how the rays are drawn.</td></tr>
+  <tr><td>3-D and results</td><td>The room in 3-D above the results tabs. Drag to orbit, scroll to zoom, right-drag to pan; the <b class="ui">Perspective</b>, <b class="ui">Top</b>, <b class="ui">Front</b>, <b class="ui">Back</b>, <b class="ui">Left</b> and <b class="ui">Right</b> buttons set a standard view. <b class="ui">Show surfaces</b> hides the walls so that a source behind them can be picked up.</td></tr>
+  <tr><td>Map</td><td>A second 3-D room for maps, and the map drawn flat beside it (see <a href="#maps">Maps</a>).</td></tr>
+  <tr><td>Windows</td><td><b class="ui">Sources and receivers</b>, <b class="ui">Surfaces</b> and <b class="ui">Settings</b> open in browser windows of their own, so they can sit beside the 3-D view or on a second screen. If the browser blocks pop-ups, they open as panels on the page instead.</td></tr>
+  <tr><td>Links</td><td><b class="ui">User guide</b> (this page) and <b class="ui">Theory and references</b>, beside the view tabs.</td></tr>
+</table>
+<p>The octave band chips (63 Hz to 8 kHz, and <b class="ui">Overall</b>) choose the band for the decay curve, the impulse response, the map and the absorption the drawn rays use. Overall adds the eight bands' energies together.</p>
+
+<h2 id="room">3. The room</h2>
+<p>Without a model the room is a box. Set its <b class="ui">Length</b>, <b class="ui">Width</b> and <b class="ui">Height</b> with the sliders, and its floor, walls and ceiling in the Surfaces window. Positions are in metres: x along the length, y across the width, z up from the floor.</p>
+
+<h2 id="models">4. Imported models</h2>
+<h3>Reading a model</h3>
+<p><b class="ui">Import model…</b> reads DXF and DWG (3-D faces), OBJ, STL, COLLADA (<code>.dae</code>, what SketchUp exports), IFC and 3D Studio (<code>.3ds</code>). Choose the drawing's units first (metres, centimetres, millimetres, feet or inches); tick <b class="ui">OBJ is y-up</b> for OBJ files from most modelling tools. IFC and COLLADA carry their own units. Each layer, material or object becomes a <i>surface group</i>, which takes one finish. An IFC file's rooms are listed to choose from. The example models load with one click. <b class="ui">Use box room</b> puts the box back.</p>
+<p>Solids and meshes that are not plain faces are skipped, and the page says how many: explode them to faces in your CAD program first.</p>
+<h3>A model that is not closed</h3>
+<p>The room must be one closed surface: every edge shared by exactly two faces. If it is not, the page lists where (holes, edges with too many faces, separate parts), and a click on a fault picks it out in the 3-D view. From there:</p>
+<ul>
+  <li><b class="ui">Fill</b> closes a hole with a flat face (or flat parts), in a new group to be given a finish.</li>
+  <li><b class="ui">Repair the model</b> fills holes, joins corners that nearly meet, cuts T-junctions and turns furniture and hanging sheets into free-standing screens (or, ticked, their boxes).</li>
+  <li><b class="ui">Take it as outdoors (open air)</b> treats every surface as standing in the open: for a site, a courtyard or a street.</li>
+</ul>
+<h3>Changing the groups</h3>
+<p>In the Surfaces window a group drawn on one layer can be <b class="ui">Split</b> into its flat surfaces (floor, ceiling, walls), and any group can be <b class="ui">Rename</b>d, merged into another (<b class="ui">Merge into…</b>) or <b class="ui">Delete</b>d.</p>
+<h3>Editing the shape</h3>
+<p>Press <b class="ui">Edit shape</b> above the 3-D view. A click on the model picks the corner nearest the click (yellow) and the face under it (outlined). Then:</p>
+<ul>
+  <li>To <b>move a corner</b>, type its new x, y and z and press <b class="ui">Move corner here</b>. Every face that meets there follows it.</li>
+  <li>To <b>draw a face</b>, pick its corners in order round it with <b class="ui">Add to new face</b> (a picked corner, or coordinates typed in), choose the group it goes in (or <b class="ui">New group…</b> and a name), and press <b class="ui">Add face</b>. The corners must lie in one plane; the face may be concave.</li>
+  <li>To <b>delete a surface</b>, pick a face of it and press <b class="ui">Delete its surface</b>: the whole flat surface it belongs to goes.</li>
+</ul>
+<p>The camera stays where it is while you edit. Every change to a model (fills, repairs, splits, group and shape edits) is kept with it, and a saved project makes them again when it is loaded.</p>
+
+<h2 id="surfaces">5. Surfaces and screens</h2>
+<h3>Finishes</h3>
+<p>The Surfaces window has a block for each surface (or group). Click its name to isolate it in the 3-D view, coloured by its absorption in the band shown. Its material opens a browser of the materials in sections (a small built-in library of generic materials, plus your own library if you keep one in <code>%APPDATA%\RoomAcoustics3D\materials.json</code>, the same layout as <code>src/RoomAcoustics.Core/Materials/Data/AbsorptionMaterials.json</code>), with a search, a table of absorption by band that sorts on any column, a curve against the material in use, favourites and recently used materials, and <b class="ui">My materials</b> for your own coefficients. <b class="ui">Scattering</b> sets the scattering coefficient.</p>
+<ul>
+  <li><b class="ui">Audience area</b>: seating, whose absorption counts a 0.5 m strip along its exposed edge. For a model the exposed edge is found from the model (<b class="ui">Use it</b> puts the found length back).</li>
+  <li><b class="ui">Open (sound passes out)</b>: a window or opening; everything that reaches it is lost.</li>
+  <li><b class="ui">Free-standing screens</b> (a model's group): thin panels inside the room that reflect from both sides, need not be closed, and let sound bend round their free edges; a <b class="ui">Reduction</b> lets some through.</li>
+</ul>
+<h3>Screens drawn in the program</h3>
+<p>Under <b class="ui">Screens</b>, <b class="ui">+ Add screen</b> puts an upright panel in the room, placed by its centre (x, y), base height, length, height and angle, with a finish on both sides and an optional door. <b class="ui">+ Add partition</b> adds a wall across the room with a door, for two rooms coupled through it.</p>
+
+<h2 id="sources">6. Sources and receivers</h2>
+<h3>Placing them</h3>
+<p>Click a source or receiver in the 3-D view and drag the arrows of its gizmo (each arrow moves it along one axis), or type its position in the Sources and receivers panel. Up to eight sources and eight receivers: <b class="ui">+ Add</b> adds a source, <b class="ui">+ Add receiver</b> a receiver, and <b class="ui">Receivers in a line</b> puts eight in a line away from the source (for the open-plan office and workroom results). The source chips choose which source the panel edits; <b class="ui">Mute</b> and <b class="ui">Solo</b> leave sources out of a calculation.</p>
+<h3>Patterns</h3>
+<table>
+  <tr><th>Pattern</th><th>What it is</th></tr>
+  <tr><td>Omnidirectional</td><td>The same in every direction.</td></tr>
+  <tr><td>Horn-like</td><td>A pattern from its −6 dB horizontal and vertical coverage.</td></tr>
+  <tr><td>Line array</td><td>Elements at a spacing, with a delay step that steers the beam, a splay that curves the array, and shading.</td></tr>
+  <tr><td>Loudspeaker</td><td>A measured pattern uploaded as a CSV balloon, a Common Loudspeaker Format file (the text format, or the binary <code>.CF2</code> that manufacturers offer for download), an EASE 3 or 4 speaker's balloon (its <code>.lob</code> file, beside the <code>.spk</code>), or a BYU directivity-archive CSV (instruments and talkers); shown as a polar plot. A file is read by what it holds, so <b class="ui">All files…</b> picks one with an unusual extension.</td></tr>
+  <tr><td>Talker</td><td>A person speaking, from Chu and Warnock's measurements of 40 talkers.</td></tr>
+  <tr><td>Surface</td><td>A rectangle radiating its power evenly: a noisy wall or machine face, a window letting traffic noise in.</td></tr>
+</table>
+<p>Every pattern but omnidirectional is aimed with the <b class="ui">Aim</b> sliders, or by dragging the dot at the tip of its arrow in the 3-D view.</p>
+<h3>Levels and spectra</h3>
+<p>Each source has a sound power spectrum, entered as a <b class="ui">Sound power</b>, a <b class="ui">Level at 1 m</b> in front, or a loudspeaker's <b class="ui">Sensitivity + power</b>. Spectra start from a library (noise; voices at several efforts from ANSI, IEC, ISO 3382-3 and published measurements) and your own can be saved. Further sources can also have a delay. The receiver's sound pressure level and the STI's speech come from these levels.</p>
+<h3>The listener</h3>
+<p>The receiver has a head for listening: drag the dot on its cyan arrow to turn it (see <a href="#listen">Listening</a>).</p>
+
+<h2 id="calculate">7. Calculating</h2>
+<ul>
+  <li><b class="ui">Run simulation</b> traces rays and image sources from every source to every receiver. A progress bar shows how far it has got, and <b class="ui">Cancel</b> stops it.</li>
+  <li><b class="ui">Quick estimate</b> gives the results at once from the standard equations (Sabine, Eyring and others), from the volume, the surfaces and the distance, with no rays: good for a first look, blind to the room's shape.</li>
+  <li><b class="ui">Calculate map</b> works out a map (see <a href="#maps">Maps</a>).</li>
+</ul>
+<p>The Settings window holds how the engine works: the <b class="ui">Draft</b>, <b class="ui">Standard</b> and <b class="ui">Detailed</b> presets (or the rays traced and image-source order set by hand), the temperature and humidity, <b class="ui">Absorption by angle of incidence</b>, the Speech Transmission Index's speech, background noise and voice, and the workroom regions' d1 and d2. A model with many faces is held to a lower image-source order, and the header says so.</p>
+<p>The <b class="ui">Job list</b> keeps setups to calculate one after another and compares them at the main receiver.</p>
+<div class="note">The header says <i>inputs changed since this was calculated</i> when anything has changed since the results were worked out: run again to bring them up to date. Exports always describe the run that gave the results.</div>
+
+<h2 id="results">8. Results</h2>
+<table>
+  <tr><th>Tab</th><th>What it shows</th></tr>
+  <tr><td>Reverberation</td><td>T30 and EDT by band, beside Sabine, Eyring, Millington, Arau-Puchades and Fitzroy, and why they differ.</td></tr>
+  <tr><td>Clarity</td><td>C80 and C50 by band.</td></tr>
+  <tr><td>Frequency response</td><td>Strength G by band.</td></tr>
+  <tr><td>Decay curve, Impulse response</td><td>The Schroeder decay and the response at the receiver, in the band shown.</td></tr>
+  <tr><td>ISO 3382 / STI</td><td>Every ISO 3382 parameter by band with its single-number value, sound pressure levels, IACC, and the Speech Transmission Index with STIPA, RaSTI, SII and %ALcons.</td></tr>
+  <tr><td>Third octaves</td><td>The 23 third-octave bands from 50 Hz to 8 kHz at the receiver, worked out on request.</td></tr>
+  <tr><td>Receivers</td><td>Every receiver side by side.</td></tr>
+  <tr><td>Open-plan office</td><td>ISO 3382-3 results from a line of receivers.</td></tr>
+  <tr><td>Workroom</td><td>ISO 14257 sound distribution curves, with DL2, DLf and DL′f in the near, middle and far regions.</td></tr>
+  <tr><td>Reflections</td><td>The specular paths at the receiver, by order; click a row to draw its route.</td></tr>
+  <tr><td>Listen</td><td>Hearing the room (see <a href="#listen">Listening</a>).</td></tr>
+  <tr><td>Measured</td><td>A measured impulse response beside the simulation (see <a href="#measured">Measured responses</a>).</td></tr>
+</table>
+<p>With several receivers, a <b class="ui">Receiver</b> chooser picks which one most tabs show.</p>
+
+<h2 id="maps">9. Maps</h2>
+<p>Under Settings, <b class="ui">Map</b> chooses the kind and the grid: <b class="ui">Plan</b> (one height), <b class="ui">Section</b> (a vertical slice), <b class="ui">Height matrix</b> (plans at several heights) or <b class="ui">Above a surface</b> (a fixed height above a raked or stepped floor). <b class="ui">Calculate map</b> works out every ISO 3382 parameter, the sound pressure level, IACC and the STI at every point in one go.</p>
+<p>In the <b class="ui">Map</b> view, the bar above the map chooses the parameter and the band (or broadband) with no new calculation. The colour scale's ends can be set to compare maps, with contour lines; a click on a plan or section moves the receiver there. <b class="ui">Map CSV</b> saves every value, and <b class="ui">Map PNG</b> the map as a picture. A reflector surface chosen in Settings adds a <b class="ui">Reflector</b> coverage map.</p>
+
+<h2 id="listen">10. Listening</h2>
+<p>The <b class="ui">Listen</b> tab works out what the listener's two ears hear, then plays a built-in sound (hand claps, speech-like syllables, noise bursts) or a sound file of your own <b class="ui">In the room</b>, or <b class="ui">Dry (no room)</b> to compare. Use <b class="ui">Headphones</b>; <b class="ui">Loudspeakers</b>, with a speaker angle, plays it through a pair of speakers instead.</p>
+<ul>
+  <li>The head is a <b class="ui">Spherical model</b> by default; a measured head (HRTF) can be uploaded as a SOFA file.</li>
+  <li>With several sources, each can play a sound of its own.</li>
+  <li><b class="ui">Save as WAV</b>: the two ears' <b class="ui">Impulse response</b>, the <b class="ui">Sound as played</b>, or an Ambisonic impulse response (AmbiX, first to third order).</li>
+</ul>
+
+<h2 id="measured">11. Measured responses</h2>
+<p>The <b class="ui">Measured</b> tab reads a measured impulse response (a WAV file), works out its ISO 3382 parameters and sets them beside the simulated receiver's, band by band, with the differences in just-noticeable differences.</p>
+
+<h2 id="saving">12. Saving, exporting, reports</h2>
+<ul>
+  <li><b class="ui">Save project</b> writes one <code>.room3d.json</code> file with everything: the room or model (the model file inside it, and every change made to it), the surfaces, sources, receivers, measured patterns and settings. <b class="ui">Load project…</b> reads it back.</li>
+  <li><b class="ui">Results CSV</b> and <b class="ui">Results XLSX</b> (an Excel workbook, a sheet for each part) hold every receiver's results by band and broadband.</li>
+  <li><b class="ui">Report</b> opens a printable page with the setup, every receiver's tables and charts, and the open-plan office and workroom results; print it to PDF from the browser.</li>
+  <li>Charts and maps save as PNG pictures.</li>
+</ul>
+<p>Your favourite materials, materials of your own and saved spectra are kept in the browser. Measured patterns and HRTFs are kept by the engine until it stops; a saved project brings its measured patterns back, but an HRTF has to be uploaded again.</p>
+
+<h2 id="assistant">13. An AI assistant</h2>
+<p>While the program runs, an AI assistant that speaks the Model Context Protocol (MCP), such as Claude Code, can use the engine at <code>http://localhost:5080/mcp</code>. In Claude Code, add it once with</p>
+<pre><code>claude mcp add --transport http room-acoustics http://localhost:5080/mcp</code></pre>
+<p>Then ask it, say, to load the lecture theatre, carpet the floor and find the reverberation time and STI at the back. It can list and load the example rooms, import a model file from this computer, search the materials, simulate a room (a box or a model, with any of the sources, receivers and settings the page has) and make a quick estimate. It gets the same numbers the page shows, without the decay curves and impulse responses. A room it loads is kept by the engine but is not shown on the page. Only programs on this computer can reach it.</p>
+
+<h2 id="limits">14. Good to know</h2>
+<ul>
+  <li>The engine is geometrical (rays and image sources): it does not model room modes or wave effects at low frequencies. Diffraction is modelled at screens' edges, round the room's own corners and as scattering at surface edges.</li>
+  <li>A model with tens of thousands of faces calculates more slowly, and is held to a lower image-source order.</li>
+  <li>More rays give smoother results; the Detailed preset is slow but steady.</li>
+  <li>Each method, with its formulas and the standards it follows, is described in <a href="/theory.html">Theory and references</a>.</li>
+</ul>
+</main>
+</div>
+</body>
+</html>

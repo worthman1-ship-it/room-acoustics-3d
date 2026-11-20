@@ -1,0 +1,647 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Room Acoustics 3D: theory and references</title>
+<link rel="icon" href="data:," />
+<style>
+  :root { --ink: #1c2330; --muted: #5b6574; --rule: #d8dde5; --accent: #6d28d9; --panel: #f5f7fa; }
+  * { box-sizing: border-box; }
+  body { margin: 0; color: var(--ink); background: #fff; font: 16px/1.6 Georgia, 'Times New Roman', serif; }
+  header { padding: 28px 40px 18px; border-bottom: 1px solid var(--rule); font-family: system-ui, sans-serif; }
+  header h1 { margin: 0 0 4px; font-size: 26px; }
+  header p { margin: 0; color: var(--muted); font-size: 14px; }
+  .layout { display: grid; grid-template-columns: 270px minmax(0, 1fr); }
+  nav { position: sticky; top: 0; align-self: start; max-height: 100vh; overflow: auto; padding: 20px 18px 40px 40px; font: 13px/1.5 system-ui, sans-serif; }
+  nav ol { margin: 0; padding-left: 20px; }
+  nav a { color: var(--ink); text-decoration: none; }
+  nav a:hover { color: var(--accent); text-decoration: underline; }
+  main { max-width: 900px; padding: 8px 40px 80px 24px; counter-reset: eq; }
+  h2 { font: 600 21px/1.3 system-ui, sans-serif; margin: 44px 0 10px; padding-top: 10px; border-top: 1px solid var(--rule); }
+  h3 { font: 600 16px/1.3 system-ui, sans-serif; margin: 26px 0 6px; }
+  p, li { hyphens: auto; }
+  a { color: var(--accent); }
+  .eq { counter-increment: eq; display: flex; align-items: center; gap: 16px; margin: 12px 0 14px; padding: 6px 0; overflow-x: auto; }
+  .eq > math { flex: 1; font-size: 1.08em; }
+  .eq::after { content: '(' counter(eq) ')'; color: var(--muted); font: 13px system-ui, sans-serif; }
+  .where { margin: -4px 0 12px 24px; color: #333; font-size: 15px; }
+  .note { background: var(--panel); border-left: 3px solid var(--accent); padding: 8px 14px; margin: 14px 0; font-size: 15px; }
+  .code { font: 12.5px/1.4 Consolas, monospace; color: var(--muted); }
+  table { border-collapse: collapse; margin: 10px 0 16px; font: 14px/1.4 system-ui, sans-serif; }
+  th, td { border: 1px solid var(--rule); padding: 4px 9px; text-align: right; }
+  th:first-child, td:first-child { text-align: left; }
+  th { background: var(--panel); }
+  ol.refs { padding-left: 34px; font-size: 15px; }
+  ol.refs li { margin-bottom: 6px; }
+  math { font-family: 'Cambria Math', 'STIX Two Math', 'Latin Modern Math', serif; }
+  @media print {
+    nav, .noprint { display: none; }
+    .layout { display: block; }
+    main { max-width: none; padding: 0 10px; }
+    h2 { break-after: avoid; }
+    .eq { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Room Acoustics 3D: theory and references</h1>
+  <p>The methods and formulas the engine uses, as they are written in its code (<span class="code">src/RoomAcoustics.Core</span>), with the published sources they come from. <a class="noprint" href="/">Back to the app</a> · <a class="noprint" href="javascript:print()">Print or save as PDF</a></p>
+</header>
+<div class="layout">
+<nav aria-label="Contents">
+  <ol>
+    <li><a href="#conventions">Bands, units and conventions</a></li>
+    <li><a href="#geometry">The room's geometry</a></li>
+    <li><a href="#air">Sound in air</a></li>
+    <li><a href="#sources">Sources</a></li>
+    <li><a href="#images">Direct sound and image sources</a></li>
+    <li><a href="#rays">Ray tracing</a></li>
+    <li><a href="#surfaces">Surfaces: absorption, scattering, transmission</a></li>
+    <li><a href="#screens">Screens and diffraction</a></li>
+    <li><a href="#decay">The response and its decay</a></li>
+    <li><a href="#iso">ISO 3382-1 parameters</a></li>
+    <li><a href="#stage">Stage, echo and single numbers</a></li>
+    <li><a href="#levels">Absolute levels</a></li>
+    <li><a href="#speech">Speech: STI, STIPA, RaSTI, %ALcons, SII</a></li>
+    <li><a href="#offices">Open-plan offices and workrooms</a></li>
+    <li><a href="#statistical">Reverberation formulas and the quick estimate</a></li>
+    <li><a href="#listen">Listening: synthesis, head, IACC, Ambisonics</a></li>
+    <li><a href="#measured">Measured impulse responses</a></li>
+    <li><a href="#thirds">Third-octave bands and maps</a></li>
+    <li><a href="#limits">Limits of the method</a></li>
+    <li><a href="#refs">References</a></li>
+  </ol>
+</nav>
+<main>
+
+<h2 id="conventions">1. Bands, units and conventions</h2>
+<p>Everything is worked out in the eight octave bands 63 Hz to 8 kHz, one band at a time, with that band's absorption, scattering, air absorption and source pattern. The engine traces <em>energy</em>, not pressure: an arrival has an energy and a time but no phase, so interference between paths is not modelled (the line array is the one exception, see <a href="#array">4.4</a>). Times are counted in bins of <span class="m">\Delta t = 1</span> ms. The source emits one unit of energy in each band, so every result is a ratio of energies, except where a sound power level is given.</p>
+<p>Levels are <span class="m">10 \lg</span> of an energy ratio, where <span class="m">\lg = \log_{10}</span>. Coordinates are in metres with <span class="m">z</span> up. A unit vector is written <span class="m">\hat{u}</span>, and <span class="m">\xi</span> is a uniform random number in [0, 1).</p>
+
+<h2 id="geometry">2. The room's geometry</h2>
+<p>A room is a closed surface of flat polygon faces, plus any free-standing screens inside it. Each face is triangulated by ear clipping, with holes bridged to the outline first [Eberly 2002]. Rays find the nearest face through a bounding-volume hierarchy over the triangles, and each triangle is tested by the Möller-Trumbore method [Möller and Trumbore 1997]. A point is inside the room when a ray from it crosses the surface an odd number of times.</p>
+<h3>Volume and area</h3>
+<p>The volume comes from the divergence theorem, over the faces <span class="m">i</span> with area <span class="m">A_i</span>, outward normal <span class="m">\hat{n}_i</span> and a corner <span class="m">\mathbf{x}_i</span>, about any point <span class="m">\mathbf{c}</span> (the centroid):</p>
+<div class="eq">V = \frac{1}{3} \sum_i A_i \, \hat{n}_i \cdot (\mathbf{x}_i - \mathbf{c})</div>
+<p>If the sum comes out negative, the faces were wound inward and are turned round. <span class="m">S</span> is the total area of the closed surface.</p>
+<h3>Characteristic size of a surface</h3>
+<p>Faces that lie in one plane, share edges and have one finish make one surface. Its size, used for the edge scattering in <a href="#edges">7.3</a>, is the side of a square or the diameter of a disc of the same proportions:</p>
+<div class="eq">a = \frac{4 A}{P}</div>
+<p class="where">where <span class="m">A</span> is the surface's area and <span class="m">P</span> its perimeter.</p>
+<h3>Checking and repairing an imported model</h3>
+<p>A model must be a closed surface. The geometry check lists each run of edges used by only one face (a hole), each edge used by more than two faces, and faces wound against their neighbours. The repair runs these steps in order:</p>
+<ul>
+  <li>Holes are filled. Each loop of open edges gets a plane fitted from the normals at its corners, and is triangulated in that plane, or in flat parts if it is not flat.</li>
+  <li>Corners closer than 2 mm on open or crowded edges are joined.</li>
+  <li>T-junctions, where a corner lies on another face's edge, are cut.</li>
+  <li>Parts that are not the room, such as furniture and hanging sheets, become screens, or optionally their bounding boxes.</li>
+  <li>Holes are filled again.</li>
+</ul>
+<p>These steps are geometry housekeeping; they add no acoustics.</p>
+<h3>Editing the shape</h3>
+<p>A model's shape can also be changed by hand, in the 3-D view. Corners and faces are found by where they are, to within 1 mm, so a saved project finds them again in the model read afresh.</p>
+<ul>
+  <li>A corner moved takes every face that meets there with it. Corners that come together are joined, and faces left with no area are dropped.</li>
+  <li>A face drawn has its corners in order round it, and may be concave. They must lie in one plane, to within 2 cm or 1 % of the face's size, and the outline must not cross itself. The face is triangulated by ear clipping, and a corner within 1 mm of one of the model's is that corner, so the face joins its neighbours.</li>
+  <li>A surface deleted is the face clicked and the faces of its group joined to it edge to edge in its plane, as in a split.</li>
+</ul>
+
+<h2 id="air">3. Sound in air</h2>
+<h3>Speed of sound</h3>
+<div class="eq">c = 331.3 + 0.606 \, \vartheta \quad \text{m/s}</div>
+<p class="where">where <span class="m">\vartheta</span> is the air temperature in °C.</p>
+<h3>Air absorption (ISO 9613-1)</h3>
+<p>With absolute temperature <span class="m">T = \vartheta + 273.16</span> K, reference temperature <span class="m">T_0 = 293.15</span> K, pressure <span class="m">p_a</span>, reference pressure <span class="m">p_r = 101325</span> Pa and relative humidity <span class="m">h_r</span> (%):</p>
+<div class="eq">\frac{p_\mathrm{sat}}{p_r} = 10^{-6.8346 \left( 273.16 / T \right)^{1.261} + 4.6151}</div>
+<div class="eq">h = h_r \, \frac{p_\mathrm{sat} / p_r}{p_a / p_r}</div>
+<div class="eq">f_{rO} = \frac{p_a}{p_r} \left( 24 + 4.04 \times 10^{4} \, h \, \frac{0.02 + h}{0.391 + h} \right)</div>
+<div class="eq">f_{rN} = \frac{p_a}{p_r} \left( \frac{T}{T_0} \right)^{-1/2} \left( 9 + 280 \, h \, \exp \left\{ -4.17 \left[ \left( \frac{T}{T_0} \right)^{-1/3} - 1 \right] \right\} \right)</div>
+<div class="eq">a = 8.686 \, f^2 \left[ 1.84 \times 10^{-11} \left( \frac{p_r}{p_a} \right) \left( \frac{T}{T_0} \right)^{1/2} + \left( \frac{T}{T_0} \right)^{-5/2} \left( \frac{0.01275 \, e^{-2239.1/T}}{f_{rO} + f^2/f_{rO}} + \frac{0.1068 \, e^{-3352/T}}{f_{rN} + f^2/f_{rN}} \right) \right] \quad \text{dB/m}</div>
+<p>Here <span class="m">f</span> is the band's centre frequency (the exact centre for third octaves). Along a path of length <span class="m">\ell</span> the energy is multiplied by <span class="m">10^{-a \ell / 10}</span>. The 273.16 (not 273.15) is kept from the VBA original; it changes nothing at the precision of the standard's tables. For the reverberation formulas, the intensity attenuation coefficient is <span class="m">m = a / (10 \lg e)</span> Np/m, and the air's absorption area is <span class="m">4 m V</span>.</p>
+
+<h2 id="sources">4. Sources</h2>
+<h3>Directivity</h3>
+<p>A source radiates with a relative energy <span class="m">D(\hat{u})</span> in each direction, normalised so that its mean over the sphere is 1. That keeps the radiated power the same as an omnidirectional source's (<span class="m">D = 1</span>):</p>
+<div class="eq">D(\hat{u}) = \frac{P(\hat{u})}{\langle P \rangle}, \quad \langle P \rangle = \frac{1}{N} \sum_{i=0}^{N-1} P(\hat{u}_i)</div>
+<p class="where">where <span class="m">P</span> is the pattern as given, <span class="m">10^{L/10}</span> of its level in dB. The mean is taken over a Fibonacci lattice of <span class="m">N = 20000</span> points [González 2010], <span class="m">z_i = 1 - 2(i + 1/2)/N</span>, <span class="m">\varphi_i = i \, \pi (3 - \sqrt{5})</span>, which is nearly uniform and does not depend on a random seed. Each band has its own pattern, normalised on its own.</p>
+<p>The patterns are:</p>
+<ul>
+  <li><b>Horn</b>, from the −6 dB coverage angles <span class="m">\Theta_H</span> and <span class="m">\Theta_V</span>. At azimuth <span class="m">\phi</span> off axis and elevation <span class="m">\theta</span>, on a 2.5° grid:
+    <div class="eq">L(\phi, \theta) = \max \left\{ L_\mathrm{floor}, \; -6 \left[ \left( \frac{\phi \cos\theta}{\Theta_H / 2} \right)^2 + \left( \frac{\theta}{\Theta_V / 2} \right)^2 \right] \right\} \quad \text{dB}</div></li>
+  <li><b>Balloon</b> (a CSV upload, a CLF text or binary .CF2 file, an EASE 3 or 4 balloon (.lob), or a CIF pattern from BYU's directivity archive): a level on a grid of azimuth and elevation, interpolated bilinearly in dB. It wraps round in azimuth and is held at the end rows in elevation.</li>
+  <li><b>Polar</b>: a level against the angle from the axis, interpolated linearly in dB.</li>
+  <li><b>Talker</b>: Chu and Warnock's balloon, the mean of 40 talkers [Chu and Warnock 2002]. Its third octaves are turned into octaves by adding energies, and the 63 Hz and 125 Hz octaves take the 160 Hz third.</li>
+</ul>
+<p>A pattern is aimed by an azimuth and an elevation, with the world's up kept as up (no roll).</p>
+<h3>Several elements: lines, surfaces, clusters</h3>
+<p>An extended source is a set of point elements that radiate incoherently, so their energies add. Element <span class="m">k</span> has a share <span class="m">w_{k,b}</span> of the power in band <span class="m">b</span>, with <span class="m">\sum_k w_{k,b} = 1</span>, and is traced with that share of the rays. Its response is added with weight <span class="m">w_{k,b}</span>, after a delay <span class="m">\tau_k</span> if it has one. A delay that is not a whole number of bins is split linearly between the two bins either side, so no energy is lost. A surface source is a grid of elements about 0.5 m apart, at most 8 each way, on a rectangle facing where the source is aimed.</p>
+<h3 id="array">Coherent line array</h3>
+<p>For <span class="m">N</span> elements at spacing <span class="m">d</span>, element <span class="m">i</span> sits <span class="m">s_i = i - (N - 1)/2</span> spacings from the middle, at <span class="m">\mathbf{p}_i</span>. It has amplitude weight <span class="m">w_i</span>, its own pattern <span class="m">a_i(\hat{u})</span> (turned by its splay) and a delay <span class="m">\tau_i = i \, \Delta\tau</span>. In the far field, in the direction <span class="m">\hat{u}</span>:</p>
+<div class="eq">p(\hat{u}, \omega) = \sum_{i=0}^{N-1} w_i \, a_i(\hat{u}) \, e^{\, j \left( k \, \hat{u} \cdot \mathbf{p}_i - \omega \tau_i \right)}, \quad k = \frac{\omega}{c}</div>
+<p>Its level is <span class="m">\lvert p \rvert^2</span>. The delay step steers the beam by <span class="m">\sin\theta_s = c \, \Delta\tau / d</span>. One frequency has nulls far deeper than a band's, so each octave band is the energy mean of seven frequencies a sixth of an octave apart round its centre, held to no more than 60 dB below its peak. The weights (shading) are:</p>
+<div class="eq">w_i^\mathrm{Hamming} = 0.54 - 0.46 \cos\frac{2\pi i}{N-1}, \quad w_i^\mathrm{Hann} = \frac{1}{2} \left( 1 - \cos\frac{2\pi (i+1)}{N+1} \right), \quad w_i^\mathrm{sine} = \sin\frac{\pi (i + 1/2)}{N}</div>
+<p>Dolph-Chebyshev weights put every side lobe at a chosen level <span class="m">R</span> (in dB) below the main beam [Dolph 1946]. The Chebyshev polynomial <span class="m">T_{N-1}(\beta \cos(\pi k / N))</span>, with <span class="m">\beta = \cosh\left( \frac{1}{N-1} \operatorname{arcosh} 10^{R/20} \right)</span>, is sampled round the unit circle and transformed back to the element weights. This is the far field. It is fair beyond about <span class="m">L^2 / (2\lambda)</span> from an array of length <span class="m">L</span>.</p>
+
+<h2 id="images">5. Direct sound and image sources</h2>
+<h3>The receiver</h3>
+<p>A receiver is a sphere of radius <span class="m">r</span> (0.5 m unless set). Of the energy an isotropic source sends out, a sphere at distance <span class="m">d</span> intercepts the fraction given by its solid angle over <span class="m">4\pi</span>:</p>
+<div class="eq">F(d) = \frac{1}{2} \left( 1 - \sqrt{1 - \frac{r^2}{d^2}} \right) \approx \frac{r^2}{4 d^2}</div>
+<p>This is the expected share of rays that enter the sphere, so the direct sound and image sources (worked out exactly) are on the same scale as the ray-traced energy (counted by hits).</p>
+<h3>Direct sound</h3>
+<div class="eq">E_\mathrm{dir} = F(d) \, D(\hat{u}_{SR}) \, 10^{-a d / 10} \, \Gamma_\mathrm{screens}, \quad t = \frac{d}{c}</div>
+<p class="where">where <span class="m">d = \lvert \mathbf{R} - \mathbf{S} \rvert</span>. There is no direct sound if a wall is in the way (it may still bend round a corner of the room, <a href="#screens">section 8</a>), and <span class="m">\Gamma_\mathrm{screens}</span> is what passes any screens (<a href="#screens">section 8</a>). The arrival goes in bin <span class="m">\lfloor t / \Delta t \rfloor</span>.</p>
+<h3>Image sources</h3>
+<p>The source <span class="m">\mathbf{S}</span> is mirrored in the plane of each face, with inward normal <span class="m">\hat{n}</span> and a point <span class="m">\mathbf{x}_0</span> on the face, and the image is mirrored again, up to the chosen order (at most 10) [Allen and Berkley 1979; Borish 1984]:</p>
+<div class="eq">\mathbf{S}' = \mathbf{S} - 2 \, \hat{n} \left[ \hat{n} \cdot (\mathbf{S} - \mathbf{x}_0) \right]</div>
+<p>A face is tried only if the image is in front of it. A sequence of faces is a real path if the line from the receiver back to each image in turn crosses that image's face inside its polygon. In a room that is not convex, or that has screens, each leg must also be clear of the walls and must reach each face from inside the room. A screen reflects from both sides, but a path off it must arrive and leave on the same side. Paths that give the same image point (through an edge) are counted once. A path with reflections off faces <span class="m">k = 1 \ldots n</span> and total length <span class="m">d'</span> carries:</p>
+<div class="eq">E_\mathrm{img} = \left[ \prod_{k=1}^{n} (1 - \alpha_k)(1 - s'_k) \right] D(\hat{u}_0) \, F(d') \, 10^{-a d' / 10} \, \prod_\mathrm{legs} \Gamma_\mathrm{screens}, \quad t = \frac{d'}{c}</div>
+<p class="where">Here <span class="m">\alpha_k</span> is what the face takes (<a href="#surfaces">section 7</a>) and <span class="m">s'_k</span> its scattering, including the edge diffraction, worked out with the path's own legs. <span class="m">\hat{u}_0</span> is the direction the path leaves the source. The specular share <span class="m">(1 - s')</span> is the image source's. The scattered share is left to the rays.</p>
+
+<h2 id="rays">6. Ray tracing</h2>
+<p>In each band, <span class="m">N</span> rays leave the source in uniformly random directions [Krokstad, Strøm and Sørsdal 1968; Vorländer 1989]:</p>
+<div class="eq">z = 2\xi_1 - 1, \quad \varphi = 2\pi \xi_2, \quad \hat{u} = \left( \sqrt{1 - z^2} \cos\varphi, \; \sqrt{1 - z^2} \sin\varphi, \; z \right)</div>
+<p>Each ray carries <span class="m">E_0 = D(\hat{u}) / N</span>. Launching uniformly and weighting by the pattern is unbiased and needs no rejection step. Along a segment of length <span class="m">\ell</span>, the energy is multiplied by <span class="m">10^{-a \ell / 10}</span>. At a face, it keeps <span class="m">(1 - \alpha)</span> and leaves in one of these directions:</p>
+<div class="eq">\hat{u}_\mathrm{spec} = \hat{u} - 2 (\hat{u} \cdot \hat{n}) \hat{n}</div>
+<div class="eq">\hat{u}_\mathrm{Lambert} = \sin\theta \cos\varphi \, \hat{t}_1 + \sin\theta \sin\varphi \, \hat{t}_2 + \cos\theta \, \hat{n}, \quad \cos\theta = \sqrt{\xi_1}, \; \varphi = 2\pi\xi_2</div>
+<p class="where">Here <span class="m">\hat{n}</span> is the face's normal on the side the ray arrives from, and <span class="m">\hat{t}_1, \hat{t}_2</span> complete an orthonormal frame. The Lambert direction is cosine-weighted (Lambert's law).</p>
+<h3>Scattering models</h3>
+<ul>
+  <li><b>Probabilistic</b> (the default): with probability <span class="m">s'</span> the ray leaves in the Lambert direction, otherwise specularly. A purely specular path is then a real thing, which the image sources count exactly.</li>
+  <li><b>Vector-based</b> [Christensen and Rindel 2005]: every ray leaves along
+    <div class="eq">\hat{u}_\mathrm{out} = \frac{(1 - s') \, \hat{u}_\mathrm{spec} + s' \, \hat{u}_\mathrm{Lambert}}{\left\lVert (1 - s') \, \hat{u}_\mathrm{spec} + s' \, \hat{u}_\mathrm{Lambert} \right\rVert}</div>
+    No ray stays exactly specular, so this model runs as pure ray tracing, whatever the image-source order.</li>
+</ul>
+<h3>Hybrid counting</h3>
+<p>The first segment of a ray is the direct sound, which is added analytically, so it is never counted. A later segment is counted if the ray has been scattered at least once, or has had more reflections than the image-source order. A purely specular path of low order is already counted once by the image sources. A counted segment from <span class="m">\mathbf{p}</span> along <span class="m">\hat{u}</span> enters receiver <span class="m">\mathbf{R}</span> at:</p>
+<div class="eq">\ell_e = (\mathbf{R} - \mathbf{p}) \cdot \hat{u} - \sqrt{r^2 - \left( \lvert \mathbf{R} - \mathbf{p} \rvert^2 - \left[ (\mathbf{R} - \mathbf{p}) \cdot \hat{u} \right]^2 \right)}</div>
+<p>If <span class="m">0 &lt; \ell_e \le \ell</span>, the ray deposits <span class="m">E \, 10^{-a \ell_e / 10}</span> in the bin of time <span class="m">(L + \ell_e)/c</span>, where <span class="m">L</span> is the path so far. A ray ends when its energy falls 70 dB below its launch energy, or when it passes the length of the response. Each ray draws from its own SplitMix64 stream [Steele, Lea and Flood 2014], seeded by the run's seed and the ray's number. The answer is therefore the same on any number of processor cores, and the billiard-ball view draws the rays the calculation used.</p>
+<div class="note">With Lambert scattering at every wall, the decay sits between Eyring's and Sabine's, about a third of the way from Eyring's. Eyring assumes every ray reflects at the mean free path <span class="m">4V/S</span> [Kuttruff 2016]; the spread of reflection counts between rays lengthens the decay. A purely specular rectangular room does not mix its rays, and its decay is not exponential. Real rooms have the roughness that a scattering coefficient stands for.</div>
+
+<h2 id="surfaces">7. Surfaces: absorption, scattering, transmission</h2>
+<h3>7.1 Absorption</h3>
+<p>Each finish has an absorption coefficient <span class="m">\alpha_b</span> in each band. A band with no data takes the nearest band that has it (ties go to the lower band). Library values above 1 are capped at 1.0, except per-person and per-fitting entries, which are absorption areas. An open surface (sound passes out) has <span class="m">\alpha = 1</span> and <span class="m">s = 0</span>.</p>
+<h3>Audience areas</h3>
+<p>The edge effect of seating is allowed for by a 0.5 m strip along the exposed edge [Beranek 2004]. A seated area <span class="m">S_A</span> with exposed edge length <span class="m">P_A</span> gets:</p>
+<div class="eq">\alpha' = \min \left\{ 1, \; \alpha \, \frac{S_A + 0.5 \, P_A}{S_A} \right\}</div>
+<p>For an imported model, <span class="m">P_A</span> is found from the group's outline: the edges its triangles do not share with each other. An outline edge counts as exposed unless a face beside it rises more than 0.3 m above it, as a wall or a high riser does. An edge beside an aisle, the stage or a step down is exposed, and so is one with nothing beside it. You can type over the value it finds.</p>
+<h3>Absorption by angle of incidence (optional)</h3>
+<p>With this setting, each reflection takes the absorption of the angle it meets the surface at. The surface is treated as locally reacting, with a real normalised impedance <span class="m">\xi</span> [Kuttruff 2016]:</p>
+<div class="eq">R(\theta) = \frac{\xi \cos\theta - 1}{\xi \cos\theta + 1}, \qquad \alpha(\theta) = 1 - R^2 = \frac{4 \xi \cos\theta}{(\xi \cos\theta + 1)^2}</div>
+<div class="eq">\alpha_\mathrm{random} = 2 \int_0^1 \alpha(\theta) \cos\theta \; d(\cos\theta) = \frac{8}{\xi^2} \left[ 1 + \xi - \frac{1}{1 + \xi} - 2 \ln(1 + \xi) \right]</div>
+<p>Each surface's <span class="m">\xi</span> is chosen so that this diffuse-field (Paris) average equals its coefficient, on the high-impedance side. The average is largest, 0.951, at <span class="m">\xi \approx 1.57</span>; a coefficient above that takes this <span class="m">\xi</span> and has its reflection <span class="m">1 - \alpha(\theta)</span> scaled to match. Effects:</p>
+<ul>
+  <li><b>In a diffuse field:</b> each surface absorbs what its coefficient says; only the share between angles changes.</li>
+  <li><b>Head-on sound</b> is absorbed less than the coefficient.</li>
+  <li><b>Oblique sound</b> is absorbed more, up to all of it where <span class="m">\xi\cos\theta = 1</span>, close to grazing for a hard surface.</li>
+  <li><b>Sound right at grazing</b> is hardly absorbed at all.</li>
+</ul>
+<p>The image sources use the angle of each path's arriving leg, and the rays use their own. Seating is not a plain locally reacting surface, and the low-frequency seat dip is not modelled.</p>
+<h3>7.2 Scattering</h3>
+<p>The scattering coefficient <span class="m">s</span> (as defined in ISO 17497-1) is the share of the reflected energy that is not specular.</p>
+<h3 id="edges">7.3 Scattering by the edges' diffraction</h3>
+<p>A finite surface cannot reflect specularly below a limit frequency, and what it does not reflect is spread by diffraction at its edges [Rindel 1986; Christensen and Rindel 2005]. Take a surface of size <span class="m">a</span> (from <a href="#geometry">section 2</a>), met at angle <span class="m">\theta</span> to its normal, by sound that has travelled <span class="m">d_1</span> to it and goes on <span class="m">d_2</span>:</p>
+<div class="eq">a^{*} = \frac{2 d_1 d_2}{d_1 + d_2}, \quad f_g = \frac{c \, a^{*}}{2 \left( a \cos\theta \right)^2}</div>
+<div class="eq">s_d = \begin{cases} 1 - f / f_g, \; f &lt; f_g \\ 0, \; f \ge f_g \end{cases} \qquad s' = 1 - (1 - s)(1 - s_d)</div>
+<p>For an image path, <span class="m">d_1</span> and <span class="m">d_2</span> are its legs. For a ray, <span class="m">d_1</span> is the segment that arrived, and <span class="m">d_2</span> is how far the specular reflection would go to the next face. That is looked up only when it could matter: <span class="m">f_g</span> is largest, at <span class="m">c \, d_1 / (a\cos\theta)^2</span>, when <span class="m">d_2</span> is endless.</p>
+<h3>7.4 Transmission through screens and partitions</h3>
+<p>A screen or partition with sound reduction <span class="m">R</span> in a band lets through <span class="m">\tau = 10^{-R/10}</span>, and reflects <span class="m">1 - \max(\alpha, \tau)</span>. The ray goes on through the face with probability <span class="m">\tau / \kappa</span>, otherwise it reflects, and in either case it carries <span class="m">\kappa</span>:</p>
+<div class="eq">\kappa = 1 - \alpha + \tau</div>
+<p>On average, then, <span class="m">\tau</span> goes through and <span class="m">1 - \alpha</span> comes back. A ray that passes through is not counted as a reflection. The boundary walls have nothing beyond them, so their <span class="m">R</span> is not used.</p>
+
+<h2 id="screens">8. Screens and diffraction</h2>
+<p>Sound reaches a point behind a free-standing screen by bending round its free edges: the top, and any side not against a wall. For an edge from <span class="m">\mathbf{A}</span> to <span class="m">\mathbf{B}</span>, the shortest route from <span class="m">\mathbf{S}</span> to <span class="m">\mathbf{R}</span> by way of the edge meets it at <span class="m">\mathbf{P}</span>. Unfolded about the edge, the route is straight, so <span class="m">\mathbf{P}</span> divides the feet of <span class="m">\mathbf{S}</span> and <span class="m">\mathbf{R}</span> on the edge in the ratio of their distances from it. The path difference and Fresnel number are:</p>
+<div class="eq">\delta = \lvert \mathbf{SP} \rvert + \lvert \mathbf{PR} \rvert - \lvert \mathbf{SR} \rvert, \quad N = \frac{2\delta}{\lambda}</div>
+<p>Each edge is cut by the Kurze-Anderson closed form of Maekawa's thin-barrier curve [Maekawa 1968; Kurze and Anderson 1971]:</p>
+<div class="eq">\Delta L(N) = 5 + 20 \lg \frac{\sqrt{2\pi N}}{\tanh\sqrt{2\pi N}} \quad \text{dB}</div>
+<p>The edges' energies add, held to within 20 dB of the unscreened sound, the usual limit for one thin barrier (as in ISO 9613-2). A partition adds what passes through the face the line crosses. Screens in a line multiply:</p>
+<div class="eq">\Gamma_\mathrm{screens} = \prod_\mathrm{screens} \min \left\{ 1, \; \mathrm{clamp} \left( \sum_\mathrm{edges} 10^{-\Delta L / 10}, \; 10^{-2}, \; 1 \right) + \tau \right\}</div>
+<p>A panel with no free edge lets through only its <span class="m">\tau</span>. The edge paths themselves are not checked for walls or other screens. The factor is applied to the direct sound and to each image-source leg a screen stands across.</p>
+<h3>Round the room's own corners</h3>
+<p>Where the walls hide the source from a receiver, the direct sound bends round the room's outward-pointing edges. These are the edges where two faces of the closed surface fold away from the room: the corner of an L-shaped room, the front of a balcony, a pillar. A face folds away when its far corner lies behind the other face's plane. Each such edge both points can see gives a path over the shortest route <span class="m">S \to P \to R</span> round it, found as for a screen's edge. That path's energy is:</p>
+<div class="eq">E = F(\lvert SP \rvert + \lvert PR \rvert) \, D(\hat{u}_{SP}) \, 10^{-a (\lvert SP \rvert + \lvert PR \rvert)/10} \, 10^{-\min\{\Delta L(N), \, 20\}/10}, \quad N = \frac{2\delta}{\lambda}</div>
+<p>It arrives at <span class="m">(\lvert SP \rvert + \lvert PR \rvert)/c</span>, from <span class="m">P</span>, and the paths' energies add.</p>
+<p>With image sources, a reflection a corner hides bends round it too, with one or two reflections all before the bend or all after it (images of the source, or of the receiver). For an image <span class="m">\mathbf{S}'</span> of the source, the route <span class="m">\mathbf{S}' \to \mathbf{P} \to \mathbf{R}</span> is unfolded about the edge as above. It counts only if:</p>
+<ul>
+  <li>the corner shadows the receiver from the image: the real part of the line <span class="m">\mathbf{S}'\mathbf{R}</span>, from where it leaves the last face it reflects from, passes through one of the two faces that meet at the edge (out of the shadow, the reflection's own path is the sound there);</li>
+  <li>the reflection's own specular path is not valid;</li>
+  <li>the reflections from <span class="m">\mathbf{S}</span> to <span class="m">\mathbf{P}</span> are a valid image path, and <span class="m">\mathbf{PR}</span> is clear of the walls.</li>
+</ul>
+<p>The bend first and reflections after use an image <span class="m">\mathbf{R}'</span> of the receiver in the same way. Such a path has the reflections' weight <span class="m">\prod (1-\alpha)(1-s)</span> of the image paths, times the bend's factor <span class="m">10^{-\min\{\Delta L(N), \, 20\}/10}</span> with <span class="m">\delta = \lvert \mathbf{S}'\mathbf{P} \rvert + \lvert \mathbf{PR} \rvert - \lvert \mathbf{S}'\mathbf{R} \rvert</span>, spread and absorbed by the air over its whole length.</p>
+<p>A route round two corners is not found, nor one with reflections on both sides of the bend. A wall drawn as several faces shadows only through the faces that meet at the edge. A wedge diffracts less than a thin screen deep into its shadow, so this overstates the sound there, as the 20 dB limit does.</p>
+
+<h2 id="decay">9. The response and its decay</h2>
+<p>The result at a receiver is the energy response <span class="m">h_i</span>: the energy in bin <span class="m">i</span>, time <span class="m">t_i = i\,\Delta t</span>, in each band. Following ISO 3382-1, all times are counted from the arrival of the direct sound, <span class="m">t_0</span>, the first bin with energy in the band. In what follows, <span class="m">E(t_1, t_2)</span> is the energy in the bins that start at or after <span class="m">t_0 + t_1</span> and before <span class="m">t_0 + t_2</span>.</p>
+<p>The decay curve is Schroeder's backward integral [Schroeder 1965]:</p>
+<div class="eq">L(t) = 10 \lg \frac{\int_t^{\infty} h(\tau) \, d\tau}{\int_0^{\infty} h(\tau) \, d\tau}</div>
+<p>A least-squares line <span class="m">L = L_0 + \beta t</span> is fitted to the points between two levels. The decay time is the time for a 60 dB fall, <span class="m">T = -60 / \beta</span>. The fit ranges are:</p>
+<table><tr><th>Parameter</th><th>Fit range</th></tr>
+<tr><td>EDT</td><td>0 to −10 dB</td></tr>
+<tr><td>T20</td><td>−5 to −25 dB</td></tr>
+<tr><td>T30</td><td>−5 to −35 dB</td></tr></table>
+<p>A fit needs at least two points and a falling line. The response must be long enough for the 35 dB range; the default is 2 s.</p>
+
+<h2 id="iso">10. ISO 3382-1 parameters</h2>
+<p>Here <span class="m">E_{10}</span> is the free-field energy at 10 m from the same source, worked out with the same receiver sphere: <span class="m">E_{10} = F(10)\, 10^{-10 a / 10}</span>.</p>
+<div class="eq">C_{50} = 10 \lg \frac{E(0, 50\,\mathrm{ms})}{E(50\,\mathrm{ms}, \infty)}, \quad C_{80} = 10 \lg \frac{E(0, 80\,\mathrm{ms})}{E(80\,\mathrm{ms}, \infty)}, \quad D_{50} = \frac{E(0, 50\,\mathrm{ms})}{E(0, \infty)}</div>
+<div class="eq">T_s = \frac{\sum_i (t_i + \Delta t / 2 - t_0) \, h_i}{\sum_i h_i}</div>
+<div class="eq">G = 10 \lg \frac{E(0, \infty)}{E_{10}}, \quad G_\mathrm{early} = 10 \lg \frac{E(0, 80\,\mathrm{ms})}{E_{10}}, \quad G_\mathrm{late} = 10 \lg \frac{E(80\,\mathrm{ms}, \infty)}{E_{10}}</div>
+<p>So <span class="m">G_\mathrm{early} - G_\mathrm{late} = C_{80}</span>. The direct sound's own strength and the direct-to-reverberant ratio are:</p>
+<div class="eq">G_\mathrm{dir} = 10 \lg \frac{E_\mathrm{dir}}{E_{10}}, \quad D/R = 10 \lg \frac{E_\mathrm{dir}}{E(0, \infty) - E_\mathrm{dir}}</div>
+<h3>Lateral measures</h3>
+<p>Each arrival's energy is also weighted by the angle <span class="m">\psi</span> between its direction and the receiver's lateral axis. That axis is horizontal and at right angles to the line to the source, as a figure-of-eight microphone is placed [Barron and Marshall 1981; Kleiner 1989; Bradley and Soulodre 1995]:</p>
+<div class="eq">\hat{\ell} = \frac{(-f_y, \; f_x, \; 0)}{\sqrt{f_x^2 + f_y^2}}, \quad \mathbf{f} = \mathbf{S} - \mathbf{R}</div>
+<div class="eq">LF_{80} = \frac{E_{\cos^2\psi}(5\,\mathrm{ms}, 80\,\mathrm{ms})}{E(0, 80\,\mathrm{ms})}, \quad LFC_{80} = \frac{E_{\lvert\cos\psi\rvert}(5\,\mathrm{ms}, 80\,\mathrm{ms})}{E(0, 80\,\mathrm{ms})}, \quad L_J = 10 \lg \frac{E_{\cos^2\psi}(80\,\mathrm{ms}, \infty)}{E_{10}}</div>
+
+<h2 id="stage">11. Stage, echo and single numbers</h2>
+<h3>Gade's stage measures</h3>
+<p>For a receiver about 1 m from the source, the first 10 ms holds the direct sound and the floor reflection [Gade 1989]:</p>
+<div class="eq">ST_\mathrm{early} = 10 \lg \frac{E(20, 100\,\mathrm{ms})}{E(0, 10\,\mathrm{ms})}, \quad ST_\mathrm{late} = 10 \lg \frac{E(100\,\mathrm{ms}, 1\,\mathrm{s})}{E(0, 10\,\mathrm{ms})}, \quad ST_\mathrm{total} = 10 \lg \frac{E(20\,\mathrm{ms}, 1\,\mathrm{s})}{E(0, 10\,\mathrm{ms})}</div>
+<p>The early ensemble level, for a musician hearing another across the platform, is the first 80 ms over the direct sound at 1 m from the source. In the engine, that reference is the free-field direct sound at 1 m, <span class="m">100 \, E_{10}</span>:</p>
+<div class="eq">EEL = 10 \lg \frac{E(0, 80\,\mathrm{ms})}{100 \, E_{10}} = G_\mathrm{early} - 20 \;\mathrm{dB}</div>
+<p>A reference measured on a platform also holds the floor's reflection, so a measured EEL can be up to 3 dB lower.</p>
+<h3>Echo criterion (Dietsch and Kraak)</h3>
+<p>With <span class="m">\lvert p \rvert = \sqrt{h_i}</span> taken as one pressure sample per bin, the running centre time is [Dietsch and Kraak 1986]:</p>
+<div class="eq">t_s(\tau) = \frac{\int_0^\tau t \, \lvert p(t) \rvert^n \, dt}{\int_0^\tau \lvert p(t) \rvert^n \, dt}, \qquad EK(\tau) = \frac{t_s(\tau + \Delta\tau_E) - t_s(\tau)}{\Delta\tau_E}</div>
+<table><tr><th></th><th><span class="m">n</span></th><th><span class="m">\Delta\tau_E</span></th><th>From</th><th>50 % limit</th><th>10 % limit</th></tr>
+<tr><td>Speech</td><td>2/3</td><td>9 ms</td><td>50 ms</td><td>1.0</td><td>0.9</td></tr>
+<tr><td>Music</td><td>1</td><td>14 ms</td><td>80 ms</td><td>1.8</td><td>1.5</td></tr></table>
+<p>The criterion reported is the largest <span class="m">EK(\tau)</span> beyond the "From" delay.</p>
+<h3>Single numbers (broadband)</h3>
+<p>Each is the mean of the bands ISO 3382-1:2009 Table A.1 averages, leaving out bands that cannot be worked out:</p>
+<table><tr><th>Bands</th><th>Parameters</th></tr>
+<tr><td>500 Hz and 1 kHz</td><td>T20, T30, EDT, <span class="m">T_s</span>, D50, C50, C80, G, G<sub>early</sub>, G<sub>late</sub>, G<sub>dir</sub>, D/R</td></tr>
+<tr><td>125 Hz to 1 kHz</td><td>LF<sub>80</sub>, LFC<sub>80</sub>; L<sub>J</sub> as the energy mean, <span class="m">10\lg \overline{10^{L_J/10}}</span></td></tr>
+<tr><td>250 Hz to 2 kHz</td><td>ST<sub>early</sub>, ST<sub>late</sub>, ST<sub>total</sub>, EEL</td></tr>
+<tr><td>500 Hz to 2 kHz</td><td>Echo criteria: the largest value of the three bands</td></tr></table>
+<p>Beranek's ratios use T30 [Beranek 2004]:</p>
+<div class="eq">BR = \frac{T_{125} + T_{250}}{T_{500} + T_{1000}}, \quad Br = \frac{T_{2000} + T_{4000}}{T_{500} + T_{1000}}</div>
+
+<h2 id="levels">12. Absolute levels</h2>
+<p>A source of sound power level <span class="m">L_W</span> has a free-field level at 10 m of <span class="m">L_W - 20\lg 10 - 11 = L_W - 31</span> dB, so in each band:</p>
+<div class="eq">L_p = L_W + G - 31 \quad \text{dB}</div>
+<p>Several sources add as energies. A source can be entered as its level 1 m in front on axis, <span class="m">L_{1m}</span>; then <span class="m">L_W = L_{1m} + 11 - 10\lg D(\hat{u}_\mathrm{axis})</span>. The A and C weightings are applied to the octave levels with the IEC 61672 corrections:</p>
+<table><tr><th>Hz</th><th>63</th><th>125</th><th>250</th><th>500</th><th>1k</th><th>2k</th><th>4k</th><th>8k</th></tr>
+<tr><td>A, dB</td><td>−26.2</td><td>−16.1</td><td>−8.6</td><td>−3.2</td><td>0</td><td>+1.2</td><td>+1.0</td><td>−1.1</td></tr>
+<tr><td>C, dB</td><td>−0.8</td><td>−0.2</td><td>0</td><td>0</td><td>0</td><td>−0.2</td><td>−0.8</td><td>−3.0</td></tr></table>
+
+<h2 id="speech">13. Speech: STI, STIPA, RaSTI, %ALcons, SII</h2>
+<h3>The room's modulation transfer function</h3>
+<p>From the energy response, at modulation frequency <span class="m">F</span> [Schroeder 1981; Houtgast and Steeneken 1985]:</p>
+<div class="eq">m(F) = \frac{\left\lvert \sum_i h_i \, e^{-j 2\pi F (i + 1/2) \Delta t} \right\rvert}{\sum_i h_i}</div>
+<h3>Speech Transmission Index (IEC 60268-16)</h3>
+<p>In octave band <span class="m">k</span> (125 Hz to 8 kHz), take the speech level <span class="m">L_{s,k}</span>, the noise <span class="m">L_{n,k}</span>, the reception threshold <span class="m">L_{rt,k}</span> and auditory masking from the band below. Writing <span class="m">I(L) = 10^{(L - 93.98)/10}</span>, the modulation left at each of the 14 modulation frequencies (0.63 to 12.5 Hz in third-octave steps) is:</p>
+<div class="eq">m'_k(F) = m_k(F) \, \frac{I(L_{s,k})}{I(L_{s,k}) + I(L_{n,k}) + I(L_{rt,k}) + I_{am,k}}</div>
+<div class="eq">SNR_\mathrm{eff} = \mathrm{clamp} \left( 10 \lg \frac{m'}{1 - m'}, \; -15, \; 15 \right), \quad TI = \frac{SNR_\mathrm{eff} + 15}{30}, \quad MTI_k = \frac{1}{14} \sum_{F} TI_k(F)</div>
+<div class="eq">STI = \sum_{k=1}^{7} \alpha_k \, MTI_k - \sum_{k=1}^{6} \beta_k \sqrt{MTI_k \, MTI_{k+1}}</div>
+<p>The result is rounded to 0.01. The masking intensity is <span class="m">I_{am,k} = \mathrm{amf} \cdot I(L_{k-1})</span>, where <span class="m">L_{k-1}</span> is the speech and noise of the band below added together, and amf steps with that level: 0 below 45 dB, then 10<sup>−4</sup>, 3.16×10<sup>−4</sup>, 3.16×10<sup>−4</sup>, 10<sup>−3</sup>, 3.16×10<sup>−3</sup> for 45–55, 55–65, 65–75, 75–85 and 85–95 dB, and 0.1 above 95 dB. These are the values of the engine's source module, flagged there for checking against the standard. The tables are:</p>
+<table><tr><th>Band</th><th>125</th><th>250</th><th>500</th><th>1k</th><th>2k</th><th>4k</th><th>8k</th></tr>
+<tr><td><span class="m">L_{rt}</span>, dB</td><td>46</td><td>27</td><td>12</td><td>6.5</td><td>7.5</td><td>8</td><td>12</td></tr>
+<tr><td>α male</td><td>0.085</td><td>0.127</td><td>0.230</td><td>0.233</td><td>0.309</td><td>0.224</td><td>0.173</td></tr>
+<tr><td>β male</td><td>0.085</td><td>0.078</td><td>0.065</td><td>0.011</td><td>0.047</td><td>0.095</td><td>—</td></tr>
+<tr><td>α female</td><td>—</td><td>0.117</td><td>0.223</td><td>0.216</td><td>0.328</td><td>0.250</td><td>0.194</td></tr>
+<tr><td>β female</td><td>—</td><td>0.099</td><td>0.066</td><td>0.062</td><td>0.025</td><td>0.076</td><td>—</td></tr></table>
+<p>The speech at the receiver comes from one of two places:</p>
+<ul>
+  <li><b>The sources' own levels</b>, a sound system's STI: <span class="m">L_s = L_W + G - 31</span>.</li>
+  <li><b>A talker</b> at <span class="m">L_{S,1m}</span> dB(A) at 1 m. The reference spectrum (49.5, 55.5, 59.6, 56.3, 50.8, 45.3, 36.6 dB, 125 Hz to 8 kHz) is shifted by <span class="m">L_{S,1m} - 61</span>, then taken to the receiver as <span class="m">L_s = L_{s,1m} - 20 + G</span>, since G is 20 dB at 1 m in a free field.</li>
+</ul>
+<p>The noise is an NC curve [Beranek 1957].</p>
+<h3>STIPA, RaSTI and %ALcons</h3>
+<p>STIPA (IEC 60268-16:2011) takes each band's MTI from two modulation frequencies instead of 14, then weights the bands as the full STI does:</p>
+<table><tr><th>Band (Hz)</th><th>125</th><th>250</th><th>500</th><th>1k</th><th>2k</th><th>4k</th><th>8k</th></tr>
+<tr><td>Modulation frequencies (Hz)</td><td>1.6, 8</td><td>1, 5</td><td>0.63, 3.15</td><td>2, 10</td><td>1.25, 6.25</td><td>0.8, 4</td><td>2.5, 12.5</td></tr></table>
+<p>RaSTI (IEC 60268-16:1998) is the mean of two bands' MTI, with no redundancy correction:</p>
+<ul>
+  <li>500 Hz, from 1, 2, 4 and 8 Hz.</li>
+  <li>2 kHz, from 0.7, 1.4, 2.8, 5.6 and 11.2 Hz.</li>
+</ul>
+<p>The articulation loss of consonants is:</p>
+<div class="eq">\%AL_\mathrm{cons} = 170.5405 \, e^{-5.419 \, STI}</div>
+<p>It is held to 0 to 100.</p>
+<h3>Speech Intelligibility Index (ANSI S3.5-1997, octave-band procedure)</h3>
+<p>In the six bands <span class="m">i</span>, 250 Hz to 8 kHz, with importance <span class="m">I_i</span>, the equivalent speech spectrum level <span class="m">E'_i</span>, the noise <span class="m">N'_i</span>, the reference internal noise <span class="m">X_i</span>, the hearing threshold <span class="m">T'_i</span> (0 dB: normal hearing) and the standard speech spectrum level at normal effort <span class="m">U_i</span>:</p>
+<div class="eq">D_i = \max(N'_i, \; X_i + T'_i), \quad L_i = \min \left\{ 1, \; 1 - \frac{E'_i - U_i - 10}{160} \right\}, \quad K_i = \mathrm{clamp} \left( \frac{E'_i - D_i + 15}{30}, \; 0, \; 1 \right)</div>
+<div class="eq">SII = \sum_{i=1}^{6} I_i \, L_i \, K_i</div>
+<table><tr><th>Band (Hz)</th><th>250</th><th>500</th><th>1k</th><th>2k</th><th>4k</th><th>8k</th></tr>
+<tr><td><span class="m">I_i</span></td><td>0.0617</td><td>0.1671</td><td>0.2373</td><td>0.2648</td><td>0.2142</td><td>0.0549</td></tr>
+<tr><td><span class="m">U_i</span>, dB</td><td>34.75</td><td>34.27</td><td>25.01</td><td>17.32</td><td>9.33</td><td>1.13</td></tr>
+<tr><td><span class="m">X_i</span>, dB</td><td>−3.9</td><td>−9.7</td><td>−12.5</td><td>−17.7</td><td>−25.9</td><td>−7.1</td></tr></table>
+<p>The octave procedure has no spread of masking between bands. In a room, the equivalent spectra come from the modulation transfer (clause 5.2). Each band's level is turned into a spectrum level by its width, <span class="m">B_i = 10\lg\left[ f_i (\sqrt{2} - 1/\sqrt{2}) \right]</span>. Then, at the nine modulation frequencies <span class="m">F</span> = 0.5, 1, 1.5, 2, 3, 4, 6, 8 and 16 Hz, with <span class="m">s</span> and <span class="m">n</span> the speech and noise energies in the band:</p>
+<div class="eq">m'(F) = m(F) \, \frac{s}{s + n}, \quad R = \frac{1}{9} \sum_F \mathrm{clamp} \left( 10 \lg \frac{m'}{1 - m'}, \; -15, \; 15 \right)</div>
+<div class="eq">P = 10 \lg (s + n) - B_i, \quad E' = R + P - 10 \lg \left( 1 + 10^{R/10} \right), \quad N' = E' - R</div>
+<p>So reverberation counts as noise, as it does in the STI.</p>
+
+<h2 id="offices">14. Open-plan offices and workrooms</h2>
+<h3>ISO 3382-3 (2012 and 2022)</h3>
+<p>Along a line of positions from one omnidirectional source, the speech is normal unisex speech (Table 1, 57.4 dB(A) at 1 m) taken to each position as <span class="m">L_{p,S} = L_{p,S,1m} + G - 20</span>, A-weighted over 125 Hz to 8 kHz. The STI at each position is the full method, with that speech, the background noise and male weighting. Between 2 and 16 m from the source, a least-squares line <span class="m">L_{p,A,S} = A + B \log_2 r</span> gives:</p>
+<div class="eq">D_{2,S} = -B, \quad L_{p,A,S,4m} = A + 2B, \quad r_C = 2^{\left( L_{p,A,S,4m} - 45 + 2 D_{2,S} \right) / D_{2,S}}</div>
+<p>The distraction and privacy distances, <span class="m">r_D</span> and <span class="m">r_P</span>, are where a straight line through STI against <span class="m">r</span> (every position beyond 1 m) reaches 0.50 and 0.20. A distance outside the positions' range is extrapolated.</p>
+<h3>ISO 14257 workrooms</h3>
+<p>The sound distribution value in each band, 125 Hz to 4 kHz, is <span class="m">D_j = L_{p,j} - L_{W,j} = G_j - 31</span>, and the free-field reference curve is <span class="m">D_\mathrm{ref}(r) = -20 \lg(r / 1\,\mathrm{m}) - 11</span>. The frequency-normalised value (for A-weighted pink noise, <span class="m">P_j</span> from Table 1) and the value for a machine of sound power <span class="m">L_{W,j}</span> are:</p>
+<div class="eq">D_A = 10 \lg \sum_j 10^{(D_j + P_j)/10} - 6.2, \qquad D_{L_W} = 10 \lg \sum_j 10^{(D_j + L_{W,j})/10} - 10 \lg \sum_j 10^{L_{W,j}/10}</div>
+<p>The curve is described in three regions of distance from the source (clause 6.2): near, from 1 m to <span class="m">d_1</span>; middle, from <span class="m">d_1</span> to <span class="m">d_2</span>; and far, from <span class="m">d_2</span> on. The standard's typical values, <span class="m">d_1 = 5</span> m and <span class="m">d_2 = 16</span> m, are used unless others are set to suit the room, and the results then say which. A position on a boundary counts in both regions. In each region with at least three positions <span class="m">i = n \ldots m</span> (<span class="m">z = m - n + 1</span> of them, in order of distance, <span class="m">x_i = \lg(r_i / 1\,\mathrm{m})</span>), the decay per doubling of distance is Formula 5, the least-squares slope taken with 0.3 for <span class="m">\lg 2</span>:</p>
+<div class="eq">DL_2 = -0.3 \, \frac{z \sum D_i x_i - \sum D_i \sum x_i}{z \sum x_i^2 - \left(\sum x_i\right)^2}</div>
+<p>The excess over the free-field curve, <span class="m">DL_{f,i} = D_i - D_\mathrm{ref}(r_i)</span>, is averaged over log distance by trapezoids (Formula 7):</p>
+<div class="eq">DL_f(r_n, r_m) = \frac{\sum_{i=n+1}^{m} \left(DL_{f,i} + DL_{f,i-1}\right) \lg(r_i / r_{i-1})}{2 \lg(r_m / r_n)}</div>
+<p>The regression line's height over the free-field curve at the region's conventional distance <span class="m">r</span>, 4 m near, 10 m middle and 30 m far, is Formula 8:</p>
+<div class="eq">DL'_{f,r} = \frac{1}{z}\sum D_i + 20 \lg r + \frac{DL_2}{\lg 2} \left( \frac{1}{z}\sum x_i - \lg r \right) + 11</div>
+<p>Formula 8 divides by <span class="m">\lg 2</span> where Formula 5 multiplied by 0.3, so for a free field it gives a few hundredths of a decibel rather than zero; the standard's formulas are used as written. ISO 11690's typical values of <span class="m">DL_2</span> in the middle region are shown for comparison.</p>
+
+<h2 id="statistical">15. Reverberation formulas and the quick estimate</h2>
+<p>With the total surface area <span class="m">S</span>, its mean absorption coefficient <span class="m">\bar{\alpha} = \sum S_i \alpha_i / S</span> and the air's absorption area <span class="m">4mV</span>:</p>
+<div class="eq">T = \frac{55.3 \, V}{c \, (A + 4 m V)}</div>
+<div class="eq">A_\mathrm{Sabine} = S \bar{\alpha}, \quad A_\mathrm{Eyring} = -S \ln(1 - \bar{\alpha}), \quad A_\mathrm{Millington} = -\sum_i S_i \ln(1 - \alpha_i)</div>
+<p>[Sabine 1922; Eyring 1930; Millington 1932; Sette 1933.] For Arau-Puchades and Fitzroy, the three pairs of faces <span class="m">x</span>, <span class="m">y</span>, <span class="m">z</span>, with areas <span class="m">S_x, S_y, S_z</span>, each get an Eyring time, <span class="m">T_x = 55.3V / \left[ c \left( -S \ln(1 - \bar{\alpha}_x) + 4mV \right) \right]</span>, and these are combined [Arau-Puchades 1988; Fitzroy 1959]:</p>
+<div class="eq">T_\mathrm{Arau} = T_x^{S_x/S} \, T_y^{S_y/S} \, T_z^{S_z/S}, \qquad T_\mathrm{Fitzroy} = \frac{S_x}{S} T_x + \frac{S_y}{S} T_y + \frac{S_z}{S} T_z</div>
+<p>A coefficient of 1 is taken as 0.999 inside a logarithm. Adding the air's absorption to every pair is this program's choice; neither author includes it.</p>
+<h3>Quick estimate</h3>
+<p>The quick estimate is a direct sound plus a diffuse field that decays exponentially at Eyring's time <span class="m">T</span>. Relative to the free field at 10 m (as G is), for a source of directivity factor <span class="m">Q</span> at distance <span class="m">r</span>:</p>
+<div class="eq">E_d = \frac{100 \, Q}{r^2}, \quad E_r = \frac{31200 \, T}{V} \quad \left( 31200 \approx \frac{100 \times 4 \times 4\pi}{0.161} \right)</div>
+<div class="eq">G = 10 \lg (E_d + E_r), \quad r_c = \sqrt{\frac{Q V}{312 \, T}}</div>
+<div class="eq">E(0, t) = E_d + E_r \left( 1 - e^{-13.82 \, t / T} \right), \quad E(t, \infty) = E_r \, e^{-13.82 \, t / T}</div>
+<p>From these come D50, C50, C80, G<sub>early</sub> and G<sub>late</sub>, and also:</p>
+<div class="eq">T_s = \frac{E_r \, T / 13.82}{E_d + E_r}, \qquad m(F) = \frac{\left\lvert E_d + \frac{E_r}{1 + j \omega \tau} \right\rvert}{E_d + E_r}, \quad \omega = 2\pi F, \; \tau = \frac{T}{13.82}</div>
+<p>Here 13.82 is <span class="m">\ln 10^6</span>, a 60 dB decay. Several sources add their direct sounds, and share one reverberant field. The estimate cannot see the room's shape or where sound arrives from, so LF, LFC, L<sub>J</sub> and ST are blank in it.</p>
+
+<h2 id="listen">16. Listening: synthesis, head, IACC, Ambisonics</h2>
+<h3>A pressure response from the energy</h3>
+<p>The ray tracer has no phase, so the pressure response is synthesised. In each band, Gaussian noise <span class="m">n_b</span> is limited to the band (edges <span class="m">f/\sqrt{2}</span> and <span class="m">f\sqrt{2}</span>) and scaled, sample by sample, to the energy of the bin the sample is in [Kuttruff 1993; Vorländer 2020]:</p>
+<div class="eq">p(t) = \sum_b n_b(t) \sqrt{\frac{E_b(\lfloor t / \Delta t \rfloor)}{\Delta t \, f_s}}</div>
+<p>Each band then has the right energy envelope. This is a statistical model of the response, not its exact waveform. A dry signal is convolved with it by FFT. Signals are resampled by windowed sinc, with 16 zero crossings, a Hann window and the cutoff at the lower Nyquist frequency.</p>
+<h3>Head shadow and the ears' delay</h3>
+<p>Each ear is a small receiver, with each arrival weighted by the power gain of a rigid sphere, Brown and Duda's one-pole, one-zero model [Brown and Duda 1998]. With head radius <span class="m">a_h = 8.75</span> cm and <span class="m">\theta</span> the angle between where the sound comes from and the ear's axis:</p>
+<div class="eq">\lvert H(f, \theta) \rvert^2 = \frac{1 + \alpha(\theta)^2 x^2}{1 + x^2}, \quad x = \frac{\pi f a_h}{c}, \quad \alpha(\theta) = 1.05 + 0.95 \cos\left( \frac{180^\circ}{150^\circ} \theta \right)</div>
+<p>The direct sound's arrival at each ear is moved by Woodworth's path round the sphere [Woodworth 1938]:</p>
+<div class="eq">\Delta\ell(\theta) = \begin{cases} -a_h \cos\theta, \; \theta \le \pi/2 \\ a_h (\theta - \pi/2), \; \theta > \pi/2 \end{cases}</div>
+<p>A measured head (a SOFA file, AES69 SimpleFreeFieldHRIR) can replace the sphere. Its power gain in each band is the mean of <span class="m">\lvert H(f) \rvert^2</span> over the band, from each measured direction's impulse response padded to at least 8192 samples.</p>
+<h3>IACC and BQI (ISO 3382-1 Annex A)</h3>
+<p>For the two ears' signals <span class="m">p_L</span> and <span class="m">p_R</span>, over a window from <span class="m">t_1</span> to <span class="m">t_2</span> after the direct sound:</p>
+<div class="eq">IACF(\tau) = \frac{\int_{t_1}^{t_2} p_L(t) \, p_R(t + \tau) \, dt}{\sqrt{\int_{t_1}^{t_2} p_L^2 \, dt \int_{t_1}^{t_2} p_R^2 \, dt}}, \qquad IACC = \max_{\lvert \tau \rvert \le 1\,\mathrm{ms}} \lvert IACF(\tau) \rvert</div>
+<p>The windows are:</p>
+<ul>
+  <li>Early, 0 to 80 ms.</li>
+  <li>Late, 80 ms to 1 s.</li>
+  <li>Whole, 0 to 1 s.</li>
+</ul>
+<p>IACC<sub>E3</sub> is the mean of the early values at 500 Hz, 1 kHz and 2 kHz, and IACC<sub>L3</sub> the same for the late ones. The binaural quality index is <span class="m">BQI = 1 - IACC_{E3}</span> [Hidaka, Beranek and Okano 1995]. This is the definition for two recorded ear signals.</p>
+<h3>IACC of a simulated head, from where the sound comes from</h3>
+<p>The ISO table and the maps (a head at each point, facing the source) and the Listen tab (the head as it faces there) take IACC from the directions the energy arrives from, not from the rendered ears: their noise is independent at each ear, so their own correlation would be low even at 63 Hz. Each arrival reaches the two ears as the same sound, scaled by each ear's shadow <span class="m">P_L, P_R</span> (the power gain above) and delayed between them by Woodworth's path, <span class="m">\Delta = (\Delta\ell(\pi - \theta) - \Delta\ell(\theta)) / c</span>. Different arrivals are incoherent with each other, as the traced energies are. For a sphere facing the source, only the lateral angle tells the ears apart. So the tracer gathers each window's energy <span class="m">E_k</span> into 180 cells of lateral angle, one a degree, timed from the first arrival (the direct sound, or the earliest image path). Then:</p>
+<div class="eq">IACF(\tau) = \frac{\sum_k E_k \sqrt{P_{L,k} P_{R,k}} \; \rho(\tau - \Delta_k)}{\sqrt{\sum_k E_k P_{L,k} \sum_k E_k P_{R,k}}}, \qquad \rho(\tau) = \frac{\sin 2\pi f_2 \tau - \sin 2\pi f_1 \tau}{2\pi (f_2 - f_1) \tau}</div>
+<p class="where">Here <span class="m">\rho</span> is the autocorrelation of noise filling the octave band from <span class="m">f_1 = f/\sqrt{2}</span> to <span class="m">f_2 = f\sqrt{2}</span>. IACC is the largest <span class="m">\lvert IACF \rvert</span> within ±1 ms, searched every 10 µs and at each cell's own delay. One arrival on its own gives 1 from any direction; a diffuse field gives nearly 1 at 63 Hz, falling to about 0.1 to 0.3 from 2 kHz up. The whole response (0 to 1 s, IACC<sub>A</sub>) uses the two windows' cells added, and IACC<sub>A3</sub> is its mean over 500 Hz to 2 kHz.</p>
+<h3>Ambisonics, orders 1 to 3 (AmbiX: ACN order, SN3D)</h3>
+<p>A plane wave <span class="m">s</span> from the unit direction <span class="m">(x, y, z)</span> gives each channel <span class="m">s</span> times its real spherical harmonic there [Nachbar et al. 2011]. The first order is:</p>
+<div class="eq">W = s, \quad Y = s \, y, \quad Z = s \, z, \quad X = s \, x</div>
+<p>The second order (ACN 4 to 8) is:</p>
+<div class="eq">\sqrt{3}\,xy, \quad \sqrt{3}\,yz, \quad \tfrac{1}{2}(3z^2 - 1), \quad \sqrt{3}\,xz, \quad \tfrac{\sqrt{3}}{2}(x^2 - y^2)</div>
+<p>The third order (ACN 9 to 15) is:</p>
+<div class="eq">\sqrt{\tfrac{5}{8}}\,y(3x^2 - y^2), \quad \sqrt{15}\,xyz, \quad \sqrt{\tfrac{3}{8}}\,y(5z^2 - 1), \quad \tfrac{1}{2} z(5z^2 - 3), \quad \sqrt{\tfrac{3}{8}}\,x(5z^2 - 1), \quad \tfrac{\sqrt{15}}{2} z(x^2 - y^2), \quad \sqrt{\tfrac{5}{8}}\,x(x^2 - 3y^2)</div>
+<p>With SN3D, a channel of order <span class="m">n</span> holds <span class="m">1/(2n + 1)</span> of W's energy in a diffuse field.</p>
+<p>The tracer keeps each bin's energy-weighted direction of arrival, <span class="m">\mathbf{v} = \sum E \, \hat{u}_\mathrm{from} / \sum E</span>. As in DirAC [Pulkki 2007], its length <span class="m">\rho = \lvert \mathbf{v} \rvert</span> splits the bin's amplitude <span class="m">A</span>:</p>
+<ul>
+  <li><span class="m">A \sqrt{\rho}</span> is a plane wave from <span class="m">\hat{v}</span>.</li>
+  <li><span class="m">A \sqrt{1 - \rho}</span> is a diffuse field: independent noise in every channel, scaled by <span class="m">1/\sqrt{2n + 1}</span> in a channel of order <span class="m">n</span>.</li>
+</ul>
+<p>Each bin has one mean direction. So higher orders sharpen the image of each arrival, but two arrivals in the same millisecond from different ways become one plane wave between them plus a diffuse part.</p>
+
+<h2 id="measured">17. Measured impulse responses</h2>
+<p>A mono recording is analysed from its largest sample, taken as the direct sound, for at most the response length. Each octave band is cut out of the spectrum by a zero-phase filter with fourth-order Butterworth edges:</p>
+<div class="eq">\lvert H(f) \rvert = \sqrt{\frac{(f/f_l)^{8}}{1 + (f/f_l)^{8}}} \, \frac{1}{\sqrt{1 + (f/f_h)^{8}}}</div>
+<p>The squared signal is gathered into 1 ms bins. Then:</p>
+<ul>
+  <li>The noise floor, the mean energy of the last tenth of the recording, is subtracted.</li>
+  <li>The response is cut where its short-time average (11 ms, or four periods of the band if longer) first comes within 3 dB of the floor. This is a simple stand-in for Lundeby's iterative method [Lundeby et al. 1995].</li>
+  <li>A decay time is given only if the band's dynamic range exceeds its fit range by 10 dB: 20 dB for EDT, 35 dB for T20 and 45 dB for T30.</li>
+</ul>
+<p>The parameters then follow sections <a href="#decay">9</a> and <a href="#iso">10</a>. Third-octave analysis uses the exact centres <span class="m">f_n = 1000 \cdot 10^{n/10}</span> Hz.</p>
+
+<h2 id="thirds">18. Third-octave bands and maps</h2>
+<p>The engine's third-octave simulation (50 Hz to 8 kHz) runs three passes of eight bands. In each pass, the absorption and scattering are interpolated to the band centres, linearly in <span class="m">\log f</span> and held at the ends. The source pattern is that of the octave band the centre is in, and the air absorption is taken at the centre itself. The Third octaves tab shows them at the main receiver; everything else is in octave bands.</p>
+<p>A map is one ray set traced against every receiver of a grid. A receiver index tests a segment only against the receivers in the grid cells it crosses. The grid can be:</p>
+<ul>
+  <li>A plan at a height.</li>
+  <li>A vertical section.</li>
+  <li>Several heights.</li>
+  <li>Points at a height above a chosen surface.</li>
+</ul>
+<p>Every point is kept clear of the surfaces by the receiver radius. Each point gets the parameters above, in all eight bands. Contours are drawn by marching squares over the grid.</p>
+
+<h2 id="limits">19. Limits of the method</h2>
+<ul>
+  <li><b>Wave effects.</b> Geometric acoustics is not reliable below about the Schroeder frequency, <span class="m">f_S \approx 2000 \sqrt{T/V}</span>, where room modes dominate [Kuttruff 2016].</li>
+  <li><b>Interference.</b> Energy is traced, so there is no interference between paths, except within a coherent line array's own pattern.</li>
+  <li><b>Diffraction.</b> It is modelled in three places: at screens' free edges, round the room's own corners for the direct sound and for image paths of up to two reflections (both <a href="#screens">section 8</a>), and as scattering at surface edges (<a href="#edges">7.3</a>). Higher-order reflections that a corner hides, and the ray-traced sound, do not bend round it.</li>
+  <li><b>Absorption.</b> Unless the angle setting is on, a surface's absorption is the same at every angle of incidence. With it, a surface is a plain locally reacting one; the seat dip over audience is not modelled either way.</li>
+  <li><b>Synthesised responses.</b> The sound you listen to has the right energy envelope in each band, but not the true waveform.</li>
+</ul>
+
+<h2 id="refs">20. References</h2>
+<h3>Standards</h3>
+<ol class="refs">
+  <li>ISO 3382-1:2009, <i>Acoustics — Measurement of room acoustic parameters — Part 1: Performance spaces</i>.</li>
+  <li>ISO 3382-2:2008, <i>Part 2: Reverberation time in ordinary rooms</i>.</li>
+  <li>ISO 3382-3:2012 and ISO 3382-3:2022, <i>Part 3: Open plan offices</i>.</li>
+  <li>ISO 9613-1:1993, <i>Acoustics — Attenuation of sound during propagation outdoors — Part 1: Calculation of the absorption of sound by the atmosphere</i>; ISO 9613-2:1996, <i>Part 2: General method of calculation</i>.</li>
+  <li>IEC 60268-16, <i>Sound system equipment — Part 16: Objective rating of speech intelligibility by speech transmission index</i>, 2nd ed. 1998 (RaSTI), 3rd ed. 2003, 4th ed. 2011 (STIPA).</li>
+  <li>ANSI S3.5-1997 (R2017), <i>American National Standard Methods for Calculation of the Speech Intelligibility Index</i>.</li>
+  <li>ISO 14257:2001, <i>Acoustics — Measurement and parametric description of spatial sound distribution curves in workrooms for evaluation of their acoustical performance</i>.</li>
+  <li>ISO 11690-1:1996, <i>Acoustics — Recommended practice for the design of low-noise workplaces containing machinery — Part 1: Noise control strategies</i>.</li>
+  <li>ISO 17497-1:2004, <i>Acoustics — Sound-scattering properties of surfaces — Part 1: Measurement of the random-incidence scattering coefficient in a reverberation room</i>.</li>
+  <li>IEC 61672-1:2013, <i>Electroacoustics — Sound level meters — Part 1: Specifications</i> (frequency weightings).</li>
+  <li>AES69-2015, <i>AES standard for file exchange — Spatial acoustic data file format</i> (SOFA).</li>
+  <li>CLF Group, <i>Common Loudspeaker Format</i> (CLF v2) and <i>Common Instrument Format</i> (CIF), clfgroup.org.</li>
+</ol>
+<h3>Books and papers</h3>
+<ol class="refs">
+  <li>J. B. Allen and D. A. Berkley, "Image method for efficiently simulating small-room acoustics," <i>J. Acoust. Soc. Am.</i> 65, 943–950 (1979).</li>
+  <li>J. S. Arau-Puchades, "An improved reverberation formula," <i>Acustica</i> 65, 163–180 (1988).</li>
+  <li>M. Barron and A. H. Marshall, "Spatial impression due to early lateral reflections in concert halls: the derivation of a physical measure," <i>J. Sound Vib.</i> 77, 211–232 (1981).</li>
+  <li>L. L. Beranek, "Revised criteria for noise in buildings," <i>Noise Control</i> 3, 19–27 (1957).</li>
+  <li>L. L. Beranek, <i>Concert Halls and Opera Houses: Music, Acoustics, and Architecture</i>, 2nd ed., Springer (2004).</li>
+  <li>J. Borish, "Extension of the image model to arbitrary polyhedra," <i>J. Acoust. Soc. Am.</i> 75, 1827–1836 (1984).</li>
+  <li>J. S. Bradley and G. A. Soulodre, "Objective measures of listener envelopment," <i>J. Acoust. Soc. Am.</i> 98, 2590–2597 (1995).</li>
+  <li>C. P. Brown and R. O. Duda, "A structural model for binaural sound synthesis," <i>IEEE Trans. Speech Audio Process.</i> 6, 476–488 (1998).</li>
+  <li>C. L. Christensen and J. H. Rindel, "A new scattering method that combines roughness and diffraction effects," <i>Forum Acusticum</i>, Budapest (2005).</li>
+  <li>W. T. Chu and A. C. C. Warnock, <i>Detailed directivity of sound fields around human talkers</i>, NRC Institute for Research in Construction, Research Report RR-104 (2002).</li>
+  <li>L. Dietsch and W. Kraak, "Ein objektives Kriterium zur Erfassung von Echostörungen bei Musik- und Sprachdarbietungen," <i>Acustica</i> 60, 205–216 (1986).</li>
+  <li>C. L. Dolph, "A current distribution for broadside arrays which optimizes the relationship between beam width and side-lobe level," <i>Proc. IRE</i> 34, 335–348 (1946).</li>
+  <li>D. Eberly, <i>Triangulation by ear clipping</i>, Geometric Tools (2002, revised 2008).</li>
+  <li>C. F. Eyring, "Reverberation time in 'dead' rooms," <i>J. Acoust. Soc. Am.</i> 1, 217–241 (1930).</li>
+  <li>D. Fitzroy, "Reverberation formula which seems to be more accurate with nonuniform distribution of absorption," <i>J. Acoust. Soc. Am.</i> 31, 893–897 (1959).</li>
+  <li>A. C. Gade, "Investigations of musicians' room acoustic conditions in concert halls, Parts I and II," <i>Acustica</i> 69, 193–203 and 249–262 (1989).</li>
+  <li>Á. González, "Measurement of areas on a sphere using Fibonacci and latitude–longitude lattices," <i>Math. Geosci.</i> 42, 49–64 (2010).</li>
+  <li>T. Hidaka, L. L. Beranek and T. Okano, "Interaural cross-correlation, lateral fraction, and low- and high-frequency sound levels as measures of acoustical quality in concert halls," <i>J. Acoust. Soc. Am.</i> 98, 988–1007 (1995).</li>
+  <li>T. Houtgast and H. J. M. Steeneken, "A review of the MTF concept in room acoustics and its use for estimating speech intelligibility in auditoria," <i>J. Acoust. Soc. Am.</i> 77, 1069–1077 (1985).</li>
+  <li>M. Kleiner, "A new way of measuring the lateral energy fraction," <i>Appl. Acoust.</i> 27, 321–327 (1989).</li>
+  <li>A. Krokstad, S. Strøm and S. Sørsdal, "Calculating the acoustical room response by the use of a ray tracing technique," <i>J. Sound Vib.</i> 8, 118–125 (1968).</li>
+  <li>U. J. Kurze and G. S. Anderson, "Sound attenuation by barriers," <i>Appl. Acoust.</i> 4, 35–53 (1971).</li>
+  <li>H. Kuttruff, "Auralization of impulse responses modeled on the basis of ray-tracing results," <i>J. Audio Eng. Soc.</i> 41, 876–880 (1993).</li>
+  <li>H. Kuttruff, <i>Room Acoustics</i>, 6th ed., CRC Press (2016).</li>
+  <li>A. Lundeby, T. E. Vigran, H. Bietz and M. Vorländer, "Uncertainties of measurements in room acoustics," <i>Acustica</i> 81, 344–355 (1995).</li>
+  <li>Z. Maekawa, "Noise reduction by screens," <i>Appl. Acoust.</i> 1, 157–173 (1968).</li>
+  <li>G. Millington, "A modified formula for reverberation," <i>J. Acoust. Soc. Am.</i> 4, 69–82 (1932).</li>
+  <li>T. Möller and B. Trumbore, "Fast, minimum storage ray-triangle intersection," <i>J. Graphics Tools</i> 2(1), 21–28 (1997).</li>
+  <li>C. Nachbar, F. Zotter, E. Deleflie and A. Sontacchi, "AmbiX — a suggested Ambisonics format," <i>Ambisonics Symposium</i>, Lexington (2011).</li>
+  <li>V. Pulkki, "Spatial sound reproduction with directional audio coding," <i>J. Audio Eng. Soc.</i> 55, 503–516 (2007).</li>
+  <li>J. H. Rindel, "Attenuation of sound reflections due to diffraction," <i>Proc. Nordic Acoustical Meeting</i>, Aalborg, 257–260 (1986).</li>
+  <li>W. C. Sabine, <i>Collected Papers on Acoustics</i>, Harvard University Press (1922).</li>
+  <li>M. R. Schroeder, "New method of measuring reverberation time," <i>J. Acoust. Soc. Am.</i> 37, 409–412 (1965).</li>
+  <li>M. R. Schroeder, "Modulation transfer functions: definition and measurement," <i>Acustica</i> 49, 179–182 (1981).</li>
+  <li>W. J. Sette, "A new reverberation time formula," <i>J. Acoust. Soc. Am.</i> 4, 193–210 (1933).</li>
+  <li>G. L. Steele, D. Lea and C. H. Flood, "Fast splittable pseudorandom number generators," <i>Proc. OOPSLA</i>, 453–472 (2014).</li>
+  <li>M. Vorländer, "Simulation of the transient and steady-state sound propagation in rooms using a new combined ray-tracing/image-source algorithm," <i>J. Acoust. Soc. Am.</i> 86, 172–178 (1989).</li>
+  <li>M. Vorländer, <i>Auralization: Fundamentals of Acoustics, Modelling, Simulation, Algorithms and Acoustic Virtual Reality</i>, 2nd ed., Springer (2020).</li>
+  <li>R. S. Woodworth, <i>Experimental Psychology</i>, Holt (1938).</li>
+</ol>
+<h3>Data</h3>
+<ol class="refs">
+  <li>Absorption coefficients: a small built-in library of generic materials, each naming its source: BB93 (Building Bulletin 93), EN 12354-6, Bies and Hansen, <i>Engineering Noise Control</i>, and Egan, <i>Concepts in Architectural Acoustics</i>; and your own library, if you have one.</li>
+  <li>Instrument and talker directivities: Brigham Young University, Acoustics Research Group, directivity archive (CIF patterns with their ASCII CSV files).</li>
+</ol>
+</main>
+</div>
+<script>
+// A small TeX-to-MathML converter for the formulas on this page: \frac, \sqrt, ^ and _, \left and \right, \begin{cases}, accents, Greek letters,
+// operators and named functions. MathML is drawn by the browser itself (Chrome and Edge 109+, Firefox, Safari), so the page needs nothing else.
+(() => {
+  const NS = 'http://www.w3.org/1998/Math/MathML';
+  const GREEK = { alpha: 'α', beta: 'β', gamma: 'γ', delta: 'δ', epsilon: 'ϵ', varepsilon: 'ε', zeta: 'ζ', eta: 'η', theta: 'θ', vartheta: 'ϑ', kappa: 'κ',
+    lambda: 'λ', mu: 'μ', nu: 'ν', xi: 'ξ', pi: 'π', rho: 'ρ', sigma: 'σ', tau: 'τ', phi: 'ϕ', varphi: 'φ', chi: 'χ', psi: 'ψ', omega: 'ω',
+    Gamma: 'Γ', Delta: 'Δ', Theta: 'Θ', Lambda: 'Λ', Xi: 'Ξ', Pi: 'Π', Sigma: 'Σ', Phi: 'Φ', Psi: 'Ψ', Omega: 'Ω', ell: 'ℓ', infty: '∞', partial: '∂' };
+  const OPS = { cdot: '⋅', times: '×', le: '≤', ge: '≥', approx: '≈', to: '→', pm: '±', in: '∈', neq: '≠', propto: '∝', ldots: '…',
+    lvert: '|', rvert: '|', lVert: '‖', rVert: '‖', langle: '⟨', rangle: '⟩', lfloor: '⌊', rfloor: '⌋', circ: '°', '{': '{', '}': '}', '%': '%' };
+  const BIG = { sum: '∑', prod: '∏', int: '∫' };
+  const FUNCS = ['lg', 'ln', 'log', 'exp', 'sin', 'cos', 'tan', 'tanh', 'cosh', 'arcosh', 'min', 'max'];
+  const ACCENTS = { hat: '^', bar: '¯', overline: '‾', vec: '→', tilde: '~' };
+
+  function tokens(s) {
+    const out = [];
+    for (let i = 0; i < s.length;) {
+      const c = s[i];
+      if (/\s/.test(c)) { i++; continue; }
+      if (c === '\\') {
+        let j = i + 1;
+        if (/[a-zA-Z]/.test(s[j])) while (j < s.length && /[a-zA-Z]/.test(s[j])) j++; else j++;
+        const cmd = s.slice(i, j);
+        if (['\\text', '\\mathrm', '\\mathbf', '\\operatorname', '\\begin', '\\end'].includes(cmd)) {
+          // the argument is read as it is written, spaces and all
+          while (/\s/.test(s[j])) j++;
+          let depth = 0, k = j;
+          for (; k < s.length; k++) { if (s[k] === '{') depth++; else if (s[k] === '}' && --depth === 0) break; }
+          out.push({ cmd, body: s.slice(j + 1, k) });
+          i = k + 1;
+        } else { out.push(cmd); i = j; }
+        continue;
+      }
+      if (/[0-9.]/.test(c)) { let j = i; while (j < s.length && /[0-9.]/.test(s[j])) j++; out.push(s.slice(i, j)); i = j; continue; }
+      out.push(c); i++;
+    }
+    return out;
+  }
+
+  function el(name, kids = [], attrs = {}) {
+    const e = document.createElementNS(NS, name);
+    for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+    for (const k of kids) e.append(k);
+    return e;
+  }
+  const leaf = (name, text, attrs) => { const e = el(name, [], attrs); e.textContent = text; return e; };
+  const row = (kids) => (kids.length === 1 ? kids[0] : el('mrow', kids));
+
+  function parse(tex, display) {
+    const T = tokens(tex);
+    let p = 0;
+    const seq = (stop) => { const out = []; while (p < T.length && !stop(T[p])) out.push(scripted()); return out; };
+    function group() {
+      if (T[p] !== '{') return atom();
+      p++;
+      const kids = seq((t) => t === '}');
+      p++;
+      return row(kids);
+    }
+    function cases() {
+      // rows split by \\, the condition after a ; written as '1 - f/f_g, \; f < f_g'
+      const rows = [[]];
+      while (p < T.length && !(typeof T[p] === 'object' && T[p].cmd === '\\end')) {
+        if (T[p] === '\\\\') { p++; rows.push([]); continue; }
+        rows[rows.length - 1].push(scripted());
+      }
+      p++;
+      const table = el('mtable', rows.map((r) => el('mtr', [el('mtd', [row(r)], { columnalign: 'left' })])), { columnalign: 'left' });
+      return el('mrow', [leaf('mo', '{', { stretchy: 'true' }), table]);
+    }
+    function atom() {
+      const k = T[p++];
+      if (k === undefined) return el('mrow');
+      if (typeof k === 'object') {
+        if (k.cmd === '\\text') return leaf('mtext', ' ' + k.body + ' ');
+        if (k.cmd === '\\begin') return cases();
+        if (k.cmd === '\\end') return el('mrow');
+        if (k.cmd === '\\mathbf') return leaf('mi', k.body, { mathvariant: 'bold' });
+        if (k.cmd === '\\operatorname') return el('mrow', [leaf('mi', k.body), leaf('mo', '⁡')]);
+        return leaf('mi', k.body, { mathvariant: 'normal' });
+      }
+      if (k === '{') { const kids = seq((t) => t === '}'); p++; return row(kids); }
+      if (k === '\\,' || k === '\\;' || k === '\\ ') return el('mspace', [], { width: k === '\\,' ? '0.17em' : '0.28em' });
+      if (k[0] === '\\' && k.length > 1) {
+        const n = k.slice(1);
+        if (n === 'frac' || n === 'tfrac' || n === 'dfrac') { const a = group(); const b = group(); return el('mfrac', [a, b]); }
+        if (n === 'sqrt') return el('msqrt', [group()]);
+        if (n in ACCENTS) return el('mover', [group(), leaf('mo', ACCENTS[n])], { accent: 'true' });
+        if (n === 'left' || n === 'right') {
+          // \left( ... \right) is one row, so the fences stretch to what is between them and no further
+          const fence = (form) => {
+            let d = T[p++];
+            if (d === '.') return el('mrow');
+            if (d[0] === '\\') d = OPS[d.slice(1)] ?? d.slice(1);
+            return leaf('mo', d, { stretchy: 'true', fence: 'true', form });
+          };
+          if (n === 'right') return fence('postfix');
+          const open = fence('prefix');
+          const inside = seq((t) => t === '\\right');
+          p++;
+          return el('mrow', [open, ...inside, fence('postfix')]);
+        }
+        if (n in GREEK) return leaf('mi', GREEK[n], /^[A-Z]/.test(n) ? { mathvariant: 'normal' } : {});
+        // sums and products take their limits below and above; an integral's go beside it
+        if (n in BIG) return leaf('mo', BIG[n], n === 'int' ? { largeop: 'true' } : { largeop: 'true', movablelimits: 'false', 'data-limits': 'true' });
+        if (n === 'max' || n === 'min') return leaf('mi', n, { 'data-limits': 'true' });
+        if (FUNCS.includes(n)) return el('mrow', [leaf('mi', n), leaf('mo', '⁡')]);
+        if (n === 'quad') return el('mspace', [], { width: '1em' });
+        if (n === 'qquad') return el('mspace', [], { width: '2em' });
+        if (n in OPS) return leaf('mo', OPS[n], { stretchy: 'false' }); // bars and brackets stretch only between \left and \right
+        return leaf('mi', n);
+      }
+      if (/^[0-9.]+$/.test(k)) return leaf('mn', k);
+      if (/^[a-zA-Z]$/.test(k)) return leaf('mi', k);
+      if (k === '-') return leaf('mo', '−');
+      if (k === '(' || k === ')' || k === '[' || k === ']') return leaf('mo', k, { stretchy: 'false' }); // plain brackets stay their own size
+      return leaf('mo', k);
+    }
+    function scripted() {
+      const base = atom();
+      const big = base.getAttribute && base.getAttribute('data-limits') === 'true';
+      let sub = null, sup = null;
+      while (T[p] === '_' || T[p] === '^' || T[p] === "'") {
+        const k = T[p++];
+        if (k === "'") { sup = leaf('mo', '′'); continue; }
+        const a = group();
+        if (k === '_') sub = a; else sup = a;
+      }
+      if (!sub && !sup) return base;
+      if (big && display) return sub && sup ? el('munderover', [base, sub, sup]) : sub ? el('munder', [base, sub]) : el('mover', [base, sup]);
+      return sub && sup ? el('msubsup', [base, sub, sup]) : sub ? el('msub', [base, sub]) : el('msup', [base, sup]);
+    }
+    return el('math', [row(seq(() => false))], display ? { display: 'block' } : {});
+  }
+
+  for (const e of document.querySelectorAll('.eq, .m')) {
+    const tex = e.textContent;
+    try { e.replaceChildren(parse(tex, e.classList.contains('eq'))); }
+    catch (err) { e.textContent = tex; console.error('Could not set', tex, err); }
+  }
+})();
+</script>
+</body>
+</html>
